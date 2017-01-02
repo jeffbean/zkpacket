@@ -13,8 +13,8 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
-	"github.com/jeffbean/go-zookeeper/zk"
-	"github.com/jeffbean/go-zookeeper/zk/proto"
+	"github.com/samuel/go-zookeeper/zk"
+	"github.com/samuel/go-zookeeper/zk/proto"
 )
 
 var (

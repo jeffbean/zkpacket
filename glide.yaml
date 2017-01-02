@@ -1,0 +1,11 @@
+package: github.com/jeffbean/zkpacket
+import:
+- package: github.com/google/gopacket
+  version: ^1.1.12
+  subpackages:
+  - layers
+  - pcap
+- package: github.com/samuel/go-zookeeper
+  subpackages:
+  - zk
+  - zk/proto
