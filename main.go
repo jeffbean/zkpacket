@@ -9,28 +9,26 @@ import (
 	"log"
 	"net"
 	"time"
+	"errors"
 
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket"
 	"github.com/samuel/go-zookeeper/zk"
-	"github.com/samuel/go-zookeeper/zk/proto"
 )
 
+const zkDefaultPort = 2181
+
 var (
-	pcapFile    = "zk-get.pcap"
+	pcapFile    = "testing_zk.pcap"
 	device      = "lo0"
-	snapshotLen = 1024
+	snapshotLen int32 = 1024
 	promiscuous = false
 	err         error
 	timeout     = 30 * time.Second
 	handle      *pcap.Handle
-	// Will reuse these for each packet
-	ethLayer layers.Ethernet
-	ipLayer  layers.IPv4
-	tcpLayer layers.TCP
+
 )
-var logger log.Logger
 
 type client struct {
 	host net.IP
@@ -54,25 +52,26 @@ func main() {
 	// // Open device
 	handle, err = pcap.OpenOffline(pcapFile)
 
-	// handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
+	 //handle, err = pcap.OpenLive(device, snapshotLen, promiscuous, timeout)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer handle.Close()
 
 	// Set filter
-	var filter = fmt.Sprintf("tcp and port %v", DefaultPort)
+	var filter = fmt.Sprintf("tcp and port %v", zkDefaultPort)
 	err = handle.SetBPFFilter(filter)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Only capturing TCP port %v packet\n", DefaultPort)
+	fmt.Printf("Only capturing TCP port %v packet\n", zkDefaultPort)
 
 	// Loop through packets in file
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
-
-		printPacketInfo(packet, rMap)
+		if err := printPacketInfo(packet, rMap); err != nil {
+			fmt.Printf("error %v\n", err)
+		}
 	}
 }
 
@@ -82,30 +81,27 @@ func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap) error {
 	// Let's see if the packet is TCP
 	tcpLayer := packet.Layer(layers.LayerTypeTCP)
 	if tcpLayer != nil {
-		// fmt.Println("TCP layer detected.")
 		tcp, _ = tcpLayer.(*layers.TCP)
 	}
 	ipLayer := packet.Layer(layers.LayerTypeIPv4)
 	if ipLayer != nil {
 		ip, _ = ipLayer.(*layers.IPv4)
 	}
-
 	applicationLayer := packet.ApplicationLayer()
 	if applicationLayer != nil {
 		appPayload := applicationLayer.Payload()
 		if tcpLayer != nil && tcp != nil {
-			if tcp.SrcPort == DefaultPort {
-				handleResponce(ip, tcp, appPayload[4:], rMap)
+			if tcp.SrcPort == zkDefaultPort {
+				if err := handleResponce(ip, tcp, appPayload[4:], rMap); err != nil {
+					return err
+				}
 			}
-			if tcp.DstPort == DefaultPort {
-				handleClient(ip, tcp, appPayload[4:], rMap)
+			if tcp.DstPort == zkDefaultPort {
+				if err := handleClient(ip, tcp, appPayload[4:], rMap); err != nil {
+					return err
+				}
 			}
 		}
-
-		// fmt.Printf("length of slice: %v\n", len(applicationLayer.Payload()))
-
-		// fmt.Printf("%v\n", applicationLayer.Payload())
-		// Search for a string inside the payload
 		fmt.Println()
 	}
 
@@ -117,26 +113,29 @@ func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap) error {
 }
 
 func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap) error {
-
-	header := &proto.RequestHeader{}
-	_, err := proto.DecodePacket(buf[:8], header)
+	if ip == nil || tcp == nil {
+		return errors.New("ip or tcp layer not detected")
+	}
+	header := &zk.RequestHeader{}
+	_, err := zk.DecodePacket(buf[:8], header)
 	if err != nil {
 		return err
 	}
+
 	client := &client{host: ip.SrcIP, port: tcp.SrcPort, xid: header.Xid}
 
 	rMap[client.String()] = header.Opcode
 	if header.Xid == 0 && header.Opcode == 0 {
-		res := &proto.ConnectRequest{}
-		_, err = proto.DecodePacket(buf, res)
+		res := &zk.ConnectRequest{}
+		_, err = zk.DecodePacket(buf, res)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("xxx> Connect Client: %#v", res)
 		return nil
 	}
-	rStruct := proto.RequestStructForOp(header.Opcode)
-	_, err = proto.DecodePacket(buf[8:], rStruct)
+	rStruct := zk.RequestStructForOp(header.Opcode)
+	_, err = zk.DecodePacket(buf[8:], rStruct)
 	if err != nil {
 		return err
 	}
@@ -147,9 +146,11 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap) error {
 	// blen := int(binary.BigEndian.Uint32(buf[:4]))
 	// fmt.Printf("%#v\n", buf[16:])
-
-	header := &proto.ResponseHeader{}
-	_, err = proto.DecodePacket(buf[:16], header)
+	if ip == nil || tcp == nil {
+		return errors.New("ip or tcp layer not detected")
+	}
+	header := &zk.ResponseHeader{}
+	_, err = zk.DecodePacket(buf[:16], header)
 	if err != nil {
 		return err
 	}
@@ -158,8 +159,8 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	operation, found := rMap[client.String()]
 	if found && operation != 0 {
 		// fmt.Printf("Tracked Op: %v\n", operation)
-		rStruct := proto.RequestStructForOp(operation)
-		_, err = proto.DecodePacket(buf[16:], rStruct)
+		rStruct := zk.RequestStructForOp(operation)
+		_, err = zk.DecodePacket(buf[16:], rStruct)
 		if err != nil {
 			return err
 		}
@@ -168,22 +169,22 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	}
 
 	if header.Xid == 0 {
-		res := &proto.ConnectResponse{}
-		_, err = proto.DecodePacket(buf, res)
+		res := &zk.ConnectResponse{}
+		_, err = zk.DecodePacket(buf, res)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("<xxx Server connect: %#v", res)
 		return nil
 	}
-	if header.Xid == proto.WatchXID {
-		res := &proto.WatcherEvent{}
-		_, err := proto.DecodePacket(buf[16:], res)
+	if header.Xid == -1 {
+		res := &zk.WatcherEvent{}
+		_, err := zk.DecodePacket(buf[16:], res)
 		if err != nil {
 			return err
 		}
 	}
-	fmt.Printf("WHAA")
+	fmt.Println("WHAA")
 
 	return nil
 }

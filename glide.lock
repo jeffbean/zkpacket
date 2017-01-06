@@ -1,0 +1,14 @@
+hash: 647ae70de6eda373432467adc888dc300290d3db55eff9b6cf619d305ce5db03
+updated: 2017-01-05T22:35:16.125567775-08:00
+imports:
+- name: github.com/google/gopacket
+  version: b83f94714c36e30ce851be1d5a0a5226f9f1bca4
+  subpackages:
+  - layers
+  - pcap
+- name: github.com/samuel/go-zookeeper
+  version: 1d7be4effb13d2d908342d349d71a284a7542693
+  subpackages:
+  - zk
+  - zk/proto
+testImports: []
