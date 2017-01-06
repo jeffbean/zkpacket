@@ -8,4 +8,3 @@ import:
 - package: github.com/samuel/go-zookeeper
   subpackages:
   - zk
-  - zk/proto
