@@ -1,28 +1,52 @@
 package main
 
 import (
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
+	"fmt"
+
+	"github.com/samuel/go-zookeeper/zk"
+	"github.com/uber-go/zap"
 )
 
-// Create a layer type, should be unique and high, so it doesn't conflict,
-// giving it a name and a decoder to use.
-var ZookeeperLayerType = gopacket.RegisterLayerType(1200, gopacket.LayerTypeMetadata{"ZookeeperLayer", gopacket.DecodeFunc(decodeZookeeperLayer)})
-
-// Implement my layer
-type ZookeeperLayer struct {
-	DataSize []byte
-	payload []byte
+type requestHeader struct {
+	Xid    int32
+	Opcode int32
 }
-func (m ZookeeperLayer) LayerType() gopacket.LayerType { return ZookeeperLayerType }
-func (m ZookeeperLayer) LayerContents() []byte { return m.DataSize }
-func (m ZookeeperLayer) LayerPayload() []byte { return m.payload }
 
-// Now implement a decoder... this one strips off the first 4 bytes of the
-// packet.
-func decodeZookeeperLayer(data []byte, p gopacket.PacketBuilder) error {
-	// Create my layer
-	p.AddLayer(&ZookeeperLayer{data[:4], data[4:]})
-	// Determine how to handle the rest of the packet
-	return p.NextDecoder(layers.LayerTypeEthernet)
+type responseHeader struct {
+	Xid  int32
+	Zxid int64
+	Err  zk.ErrCode
+}
+
+type connectRequest struct {
+	ProtocolVersion int32
+	LastZxidSeen    int64
+	TimeOut         int32
+	SessionID       int64
+	Passwd          []byte
+}
+
+type connectResponse struct {
+	ProtocolVersion int32
+	TimeOut         int32
+	SessionID       int64
+	Passwd          []byte
+}
+
+type watcherEvent struct {
+	Type  zk.EventType
+	State zk.State
+	Path  string
+}
+
+func (r *responseHeader) MarshalLog(kv zap.KeyValue) error {
+	kv.AddInt("xid", int(r.Xid))
+	kv.AddInt64("Zxid", r.Zxid)
+	kv.AddInt("errorCode", int(r.Err))
+	kv.AddString("errorMsg", errCodeToMessage(r.Err))
+	return nil
+}
+
+func (r *responseHeader) String() string {
+	return fmt.Sprintf("%v", errCodeToMessage(r.Err))
 }
