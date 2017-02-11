@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samuel/go-zookeeper/zk"
 	"github.com/uber-go/tally"
-	promreporter "github.com/uber-go/tally/prometheus"
 	"github.com/uber-go/zap"
 )
 
@@ -41,12 +39,7 @@ var (
 	// device is the listening interface to listen on
 	device            = "lo0"
 	snapshotLen int32 = 1024
-	timeout           = 5 * time.Second
-
-	// Will reuse these for each packet
-	ethLayer layers.Ethernet
-	ipLayer  layers.IPv4
-	tcpLayer layers.TCP
+	timeout           = -1 * time.Second
 )
 
 type client struct {
@@ -62,24 +55,16 @@ func (c *client) String() string {
 type clientResquestMap map[string]int32
 
 func main() {
-
 	if *flagNoColor {
 		color.NoColor = true // disables colorized output
 	}
 
-	r := promreporter.NewReporter(promreporter.Options{})
-	// Note: `promreporter.DefaultSeparator` is "_".
-	// Prometheus doesnt like metrics with "." or "-" in them.
-	scope, closer := tally.NewCachedRootScope("zkpacket", map[string]string{}, r, 1*time.Second, promreporter.DefaultSeparator)
+	scope, reporter, closer := RootScope()
 	defer closer.Close()
 
 	counter := scope.Tagged(map[string]string{
 		"cluster": "dev",
 	}).Counter("teesting_counter")
-
-	http.Handle("/metrics", r.HTTPHandler())
-	fmt.Printf("Serving :8080/metrics\n")
-	go http.ListenAndServe("localhost:8080", nil)
 
 	handle, err := pcap.OpenLive(device, snapshotLen, false /* promiscuous */, timeout)
 	if err != nil {

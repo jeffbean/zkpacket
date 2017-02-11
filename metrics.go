@@ -1,18 +1,36 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"time"
 
-	promreporter "github.com/uber-go/tally/prometheus"
-
 	"github.com/uber-go/tally"
+	promreporter "github.com/uber-go/tally/prometheus"
 )
 
-func setupMetrics() error {
-	r := promreporter.NewReporter(promreporter.Options{})
-	// Note: `promreporter.DefaultSeparator` is "_".
-	// Prometheus doesnt like metrics with "." or "-" in them.
-	scope, closer := tally.NewCachedRootScope("zkpacket", map[string]string{}, r, 1*time.Second, promreporter.DefaultSeparator)
-	defer closer.Close()
+type rootScopeFactory func() (tally.Scope, tally.CachedStatsReporter, io.Closer, error)
 
+// RootScope returns the provided metrics scope and stats reporter from the given factory
+func RootScope() (tally.Scope, tally.CachedStatsReporter, io.Closer) {
+	return newRootScope(getRootScope)
+}
+
+func newRootScope(scopeFactory rootScopeFactory) (tally.Scope, tally.CachedStatsReporter, io.Closer) {
+	scope, reporter, closer, err := scopeFactory()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize metrics reporter %v", err))
+	}
+	return scope, reporter, closer
+}
+
+func getRootScope() (tally.Scope, tally.CachedStatsReporter, io.Closer, error) {
+	reporter := promreporter.NewReporter(promreporter.Options{})
+	scope, closer := tally.NewCachedRootScope("zkpacket",
+		map[string]string{},
+		reporter,
+		1*time.Second,
+		promreporter.DefaultSeparator,
+	)
+	return scope, reporter, closer, nil
 }
