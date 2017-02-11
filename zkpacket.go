@@ -48,5 +48,5 @@ func (r *responseHeader) MarshalLog(kv zap.KeyValue) error {
 }
 
 func (r *responseHeader) String() string {
-	return fmt.Sprintf("%v", errCodeToMessage(r.Err))
+	return fmt.Sprintf("XID: %v, ZXID: %v, Err: %v", r.Xid, r.Zxid, errCodeToMessage(r.Err))
 }

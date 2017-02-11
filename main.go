@@ -5,10 +5,15 @@ package main
 // or use the example above for writing pcap files
 
 import (
+	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"os"
 	"time"
+
+	"github.com/fatih/color"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -20,14 +25,21 @@ import (
 
 const zkDefaultPort = 2181
 
+var flagNoColor = flag.Bool("no-color", false, "Disable color output")
+
 var (
+	// output is how we communicate with the user the main content
+	output io.Writer = os.Stdout
+	// clientOutput is the clientside communication colored to be easy to read
+	clientOutput = color.New(color.FgYellow)
+	// serverOutput
+	serverOutput = color.New(color.FgBlue)
+	// logger to show any
+	logger = zap.New(zap.NewTextEncoder())
+	// device is the listening interface to listen on
 	device            = "lo0"
 	snapshotLen int32 = 1024
-	promiscuous       = false
-	err         error
-	timeout     = 30 * time.Second
-	handle      *pcap.Handle
-	logger      = zap.New(zap.NewTextEncoder())
+	timeout           = 5 * time.Second
 )
 
 type client struct {
@@ -43,34 +55,30 @@ func (c *client) String() string {
 type clientResquestMap map[string]int32
 
 func main() {
-	rMap := clientResquestMap{}
-	// Open file instead of device
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer handle.Close()
-	// // Open device
-	// handle, err = pcap.OpenOffline(pcapFile)
 
-	handle, err = pcap.OpenLive(device, snapshotLen, promiscuous, timeout)
+	if *flagNoColor {
+		color.NoColor = true // disables colorized output
+	}
+	rMap := clientResquestMap{}
+
+	handle, err := pcap.OpenLive(device, snapshotLen, false /* promiscuous */, timeout)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer handle.Close()
 
-	// Set filter
+	// Set filter for capture
 	var filter = fmt.Sprintf("tcp and port %v", zkDefaultPort)
-	err = handle.SetBPFFilter(filter)
-	if err != nil {
+	if err := handle.SetBPFFilter(filter); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Only capturing TCP port %v packet\n", zkDefaultPort)
+	fmt.Fprintf(output, "Filter: %v\n", filter)
 
 	// Loop through packets in file
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
 		if err := printPacketInfo(packet, rMap); err != nil {
-			fmt.Printf("error %v\n", err)
+			fmt.Fprintf(output, "error %v\n", err)
 		}
 	}
 }
@@ -103,12 +111,10 @@ func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap) error {
 				}
 			}
 		}
-		fmt.Println()
 	}
-
-	// // Check for errors
+	// Check for errors
 	if err := packet.ErrorLayer(); err != nil {
-		fmt.Println("Error decoding some part of the packet:", err)
+		fmt.Fprintf(output, "Error decoding some part of the packet: %v", err)
 	}
 	return nil
 }
@@ -132,15 +138,14 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 		if err != nil {
 			return err
 		}
-		fmt.Printf("xxx> Connect Client: %#v", res)
+		clientOutput.Fprintf(output, "xxx> Connect Client: %#v\n", res)
 		return nil
 	}
 	rStruct := zk.RequestStructForOp(header.Opcode)
-	_, err = zk.DecodePacket(buf[8:], rStruct)
-	if err != nil {
+	if _, err = zk.DecodePacket(buf[8:], rStruct); err != nil {
 		return err
 	}
-	fmt.Printf("=> Client: %#v", rStruct)
+	clientOutput.Fprintf(output, "=> Client: %#v - %#v\n", header, rStruct)
 	return nil
 }
 
@@ -149,40 +154,35 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		return errors.New("ip or tcp layer not detected")
 	}
 	header := &responseHeader{}
-	_, err = zk.DecodePacket(buf[:16], header)
-	if err != nil {
+	if _, err := zk.DecodePacket(buf[:16], header); err != nil {
 		return err
 	}
 	// Thoery: This means the rest of the packet is blank
 	if header.Err < 0 {
 		logger.Debug("responce error", zap.Marshaler("header", header))
-		fmt.Printf("<= Server: %#v", header)
+		color.New(color.FgRed).Fprintf(output, "<= Server: %v\n", header)
 		return nil
 	}
 
 	client := &client{host: ip.SrcIP, port: tcp.DstPort, xid: header.Xid}
 	logger.Debug("decoded respnce", zap.Marshaler("header", header), zap.Object("client", client))
 
-	// fmt.Printf("Tracked Client: %v\n", client)
 	operation, found := rMap[client.String()]
 	if found && operation != 0 {
-		// fmt.Printf("Tracked Operation: %v\n", operation)
 		rStruct := zk.ResponceStructForOp(operation)
-		_, err = zk.DecodePacket(buf[16:], rStruct)
-		if err != nil {
+		if _, err := zk.DecodePacket(buf[16:], rStruct); err != nil {
 			return errors.Wrapf(err, "responce struct attempt: %#v", buf[16:])
 		}
-		fmt.Printf("<= Server: %#v", rStruct)
+		serverOutput.Fprintf(output, "<= Server: %#v\n", rStruct)
 		return nil
 	}
 
 	if header.Xid == 0 {
 		res := &connectResponse{}
-		_, err = zk.DecodePacket(buf, res)
-		if err != nil {
+		if _, err := zk.DecodePacket(buf, res); err != nil {
 			return err
 		}
-		fmt.Printf("<xxx Server connect: %#v", res)
+		serverOutput.Fprintf(output, "<xxx Server connect: %#v\n", res)
 		return nil
 	}
 
