@@ -10,16 +10,18 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/fatih/color"
-
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"github.com/pkg/errors"
 	"github.com/samuel/go-zookeeper/zk"
+	"github.com/uber-go/tally"
+	promreporter "github.com/uber-go/tally/prometheus"
 	"github.com/uber-go/zap"
 )
 
@@ -40,6 +42,11 @@ var (
 	device            = "lo0"
 	snapshotLen int32 = 1024
 	timeout           = 5 * time.Second
+
+	// Will reuse these for each packet
+	ethLayer layers.Ethernet
+	ipLayer  layers.IPv4
+	tcpLayer layers.TCP
 )
 
 type client struct {
@@ -59,7 +66,20 @@ func main() {
 	if *flagNoColor {
 		color.NoColor = true // disables colorized output
 	}
-	rMap := clientResquestMap{}
+
+	r := promreporter.NewReporter(promreporter.Options{})
+	// Note: `promreporter.DefaultSeparator` is "_".
+	// Prometheus doesnt like metrics with "." or "-" in them.
+	scope, closer := tally.NewCachedRootScope("zkpacket", map[string]string{}, r, 1*time.Second, promreporter.DefaultSeparator)
+	defer closer.Close()
+
+	counter := scope.Tagged(map[string]string{
+		"cluster": "dev",
+	}).Counter("teesting_counter")
+
+	http.Handle("/metrics", r.HTTPHandler())
+	fmt.Printf("Serving :8080/metrics\n")
+	go http.ListenAndServe("localhost:8080", nil)
 
 	handle, err := pcap.OpenLive(device, snapshotLen, false /* promiscuous */, timeout)
 	if err != nil {
@@ -72,18 +92,25 @@ func main() {
 	if err := handle.SetBPFFilter(filter); err != nil {
 		log.Fatal(err)
 	}
+
 	fmt.Fprintf(output, "Filter: %v\n", filter)
+	rMap := clientResquestMap{}
 
 	// Loop through packets in file
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
-		if err := printPacketInfo(packet, rMap); err != nil {
+		if err := printPacketInfo(packet, rMap, counter); err != nil {
 			fmt.Fprintf(output, "error %v\n", err)
 		}
 	}
 }
 
-func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap) error {
+func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap, counter tally.Counter) error {
+	// Check for errors
+	if err := packet.ErrorLayer(); err != nil {
+		fmt.Fprintf(output, "Error decoding some part of the packet: %v", err)
+		return nil
+	}
 	var tcp *layers.TCP
 	var ip *layers.IPv4
 	// Let's see if the packet is TCP
@@ -100,6 +127,7 @@ func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap) error {
 	if applicationLayer != nil {
 		appPayload := applicationLayer.Payload()
 		if tcpLayer != nil && tcp != nil {
+			counter.Inc(1)
 			if tcp.SrcPort == zkDefaultPort {
 				if err := handleResponce(ip, tcp, appPayload[4:], rMap); err != nil {
 					return err
@@ -112,10 +140,7 @@ func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap) error {
 			}
 		}
 	}
-	// Check for errors
-	if err := packet.ErrorLayer(); err != nil {
-		fmt.Fprintf(output, "Error decoding some part of the packet: %v", err)
-	}
+
 	return nil
 }
 
@@ -124,8 +149,7 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 		return errors.New("ip or tcp layer not detected")
 	}
 	header := &requestHeader{}
-	_, err := zk.DecodePacket(buf[:8], header)
-	if err != nil {
+	if _, err := zk.DecodePacket(buf[:8], header); err != nil {
 		return err
 	}
 
@@ -134,15 +158,14 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 	rMap[client.String()] = header.Opcode
 	if header.Xid == 0 && header.Opcode == 0 {
 		res := &connectRequest{}
-		_, err = zk.DecodePacket(buf, res)
-		if err != nil {
+		if _, err := zk.DecodePacket(buf, res); err != nil {
 			return err
 		}
 		clientOutput.Fprintf(output, "xxx> Connect Client: %#v\n", res)
 		return nil
 	}
 	rStruct := zk.RequestStructForOp(header.Opcode)
-	if _, err = zk.DecodePacket(buf[8:], rStruct); err != nil {
+	if _, err := zk.DecodePacket(buf[8:], rStruct); err != nil {
 		return err
 	}
 	clientOutput.Fprintf(output, "=> Client: %#v - %#v\n", header, rStruct)
@@ -158,6 +181,7 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		return err
 	}
 	// Thoery: This means the rest of the packet is blank
+	// Have not proven it with tests just yet
 	if header.Err < 0 {
 		logger.Debug("responce error", zap.Marshaler("header", header))
 		color.New(color.FgRed).Fprintf(output, "<= Server: %v\n", header)
@@ -171,7 +195,7 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	if found && operation != 0 {
 		rStruct := zk.ResponceStructForOp(operation)
 		if _, err := zk.DecodePacket(buf[16:], rStruct); err != nil {
-			return errors.Wrapf(err, "responce struct attempt: %#v", buf[16:])
+			return errors.Wrapf(err, "responce struct attempt: %#v", buf)
 		}
 		serverOutput.Fprintf(output, "<= Server: %#v\n", rStruct)
 		return nil
@@ -188,8 +212,7 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 
 	if header.Xid == -1 {
 		res := &watcherEvent{}
-		_, err := zk.DecodePacket(buf[16:], res)
-		if err != nil {
+		if _, err := zk.DecodePacket(buf[16:], res); err != nil {
 			return err
 		}
 	}

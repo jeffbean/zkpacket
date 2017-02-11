@@ -1,13 +1,64 @@
 hash: c086321ffcb9d4b44bef997ab28becd71b9c3ddfb89bece83ebf71cb223a7e56
-updated: 2017-01-05T22:37:13.814986953-08:00
+updated: 2017-02-10T21:49:10.409971364-08:00
 imports:
+- name: github.com/beorn7/perks
+  version: 4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9
+  subpackages:
+  - quantile
+- name: github.com/facebookgo/clock
+  version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
+- name: github.com/fatih/color
+  version: 5ec5d9d3c2cf82e9688b34e9bc27a94d616a7193
+- name: github.com/golang/protobuf
+  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+  subpackages:
+  - proto
 - name: github.com/google/gopacket
   version: b83f94714c36e30ce851be1d5a0a5226f9f1bca4
   subpackages:
   - layers
   - pcap
+- name: github.com/mattn/go-colorable
+  version: 5411d3eea5978e6cdc258b30de592b60df6aba96
+- name: github.com/mattn/go-isatty
+  version: 281032e84ae07510239465db46bf442aa44b953a
+- name: github.com/matttproud/golang_protobuf_extensions
+  version: c12348ce28de40eed0136aa2b644d0ee0650e56c
+  subpackages:
+  - pbutil
+- name: github.com/pkg/errors
+  version: 248dadf4e9068a0b3e79f02ed0a610d935de5302
+- name: github.com/prometheus/client_golang
+  version: c317fb74746eac4fc65fe3909195f4cf67c5562a
+  subpackages:
+  - prometheus
+  - prometheus/promhttp
+- name: github.com/prometheus/client_model
+  version: fa8ad6fec33561be4280a8f0514318c79d7f6cb6
+  subpackages:
+  - go
+- name: github.com/prometheus/common
+  version: dd2f054febf4a6c00f2343686efb775948a8bff4
+  subpackages:
+  - expfmt
+  - internal/bitbucket.org/ww/goautoneg
+  - model
+- name: github.com/prometheus/procfs
+  version: 1878d9fbb537119d24b21ca07effd591627cd160
 - name: github.com/samuel/go-zookeeper
   version: 1d7be4effb13d2d908342d349d71a284a7542693
   subpackages:
   - zk
+- name: github.com/uber-go/atomic
+  version: 3b8db5e93c4c02efbc313e17b2e796b0914a01fb
+- name: github.com/uber-go/tally
+  version: 43c1379c0577ac1eb74f9f3869cea07191c9992b
+  subpackages:
+  - prometheus
+- name: github.com/uber-go/zap
+  version: c064b5c44b285a7e2fd5c9b26e8c38228ce2bccb
+- name: golang.org/x/sys
+  version: aaabbdc969c3935a2a7f61efac801e7163c73a2a
+  subpackages:
+  - unix
 testImports: []
