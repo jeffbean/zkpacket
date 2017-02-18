@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/samuel/go-zookeeper/zk"
+	"github.com/jeffbean/go-zookeeper/zk"
 	"github.com/uber-go/zap"
 )
 

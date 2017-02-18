@@ -1,5 +1,5 @@
-hash: c086321ffcb9d4b44bef997ab28becd71b9c3ddfb89bece83ebf71cb223a7e56
-updated: 2017-02-10T21:49:10.409971364-08:00
+hash: 76ccdba99a3ac68f291c535c9e084e57992cd7e87ad717d2c270d546dc23291b
+updated: 2017-02-16T19:20:09.156445675-08:00
 imports:
 - name: github.com/beorn7/perks
   version: 4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9
@@ -18,6 +18,10 @@ imports:
   subpackages:
   - layers
   - pcap
+- name: github.com/jeffbean/go-zookeeper
+  version: 30282bb899b4be1aa38341a3c3d1203db2657b21
+  subpackages:
+  - zk
 - name: github.com/mattn/go-colorable
   version: 5411d3eea5978e6cdc258b30de592b60df6aba96
 - name: github.com/mattn/go-isatty
@@ -29,7 +33,7 @@ imports:
 - name: github.com/pkg/errors
   version: 248dadf4e9068a0b3e79f02ed0a610d935de5302
 - name: github.com/prometheus/client_golang
-  version: c317fb74746eac4fc65fe3909195f4cf67c5562a
+  version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
   - prometheus
   - prometheus/promhttp
@@ -45,12 +49,8 @@ imports:
   - model
 - name: github.com/prometheus/procfs
   version: 1878d9fbb537119d24b21ca07effd591627cd160
-- name: github.com/samuel/go-zookeeper
-  version: 1d7be4effb13d2d908342d349d71a284a7542693
-  subpackages:
-  - zk
 - name: github.com/uber-go/atomic
-  version: 3b8db5e93c4c02efbc313e17b2e796b0914a01fb
+  version: e682c1008ac17bf26d2e4b5ad6cdd08520ed0b22
 - name: github.com/uber-go/tally
   version: 43c1379c0577ac1eb74f9f3869cea07191c9992b
   subpackages:

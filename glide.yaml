@@ -5,6 +5,6 @@ import:
   subpackages:
   - layers
   - pcap
-- package: github.com/samuel/go-zookeeper
+- package: github.com/jeffbean/go-zookeeper
   subpackages:
   - zk

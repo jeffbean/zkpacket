@@ -1,6 +1,6 @@
 package main
 
-import "github.com/samuel/go-zookeeper/zk"
+import "github.com/jeffbean/go-zookeeper/zk"
 
 const (
 	errOk = 0

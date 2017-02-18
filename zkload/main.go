@@ -1,18 +1,26 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/samuel/go-zookeeper/zk"
+	"github.com/jeffbean/go-zookeeper/zk"
 	"github.com/uber-go/zap"
 )
 
-var logger = zap.New(zap.NewTextEncoder())
-var contents = []byte("hello")
+var (
+	logger   = zap.New(zap.NewTextEncoder())
+	contents = []byte("hello")
+	zkHost   string
+)
+
+func init() {
+	flag.StringVar(&zkHost, "zk-host", "127.0.0.1", "Host address of zookeeper ensemble")
+}
 
 func updateNodes(stopchan chan int, tickerChan <-chan time.Time, conn *zk.Conn, nodes []string) {
 	for {
@@ -45,11 +53,13 @@ func main() {
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-	conn, _, err := zk.Connect([]string{"127.0.0.1"}, time.Second)
+	flag.Parse()
+
+	conn, _, err := zk.Connect([]string{zkHost}, time.Second)
 	if err != nil {
 		panic(err)
 	}
-	conn2, _, err := zk.Connect([]string{"127.0.0.1"}, time.Second)
+	conn2, _, err := zk.Connect([]string{zkHost}, time.Second)
 	if err != nil {
 		panic(err)
 	}
@@ -58,8 +68,8 @@ func main() {
 		"/foo",
 		"/bar",
 	}
-	ticker := time.NewTicker(time.Second * 1).C
-	ticker2 := time.NewTicker(time.Second * 1).C
+	ticker := time.NewTicker(time.Second * 10).C
+	ticker2 := time.NewTicker(time.Second * 15).C
 	go updateNodes(quit, ticker, conn, nodes)
 	go updateNodes(quit, ticker2, conn2, nodes)
 	go handleCtrlC(c, quit)

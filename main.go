@@ -17,16 +17,18 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"github.com/jeffbean/go-zookeeper/zk"
 	"github.com/pkg/errors"
-	"github.com/samuel/go-zookeeper/zk"
 	"github.com/uber-go/tally"
 	"github.com/uber-go/zap"
 )
 
 const zkDefaultPort = 2181
 
-var flagNoColor = flag.Bool("no-color", false, "Disable color output")
-
+var (
+	flagNoColor = flag.Bool("no-color", false, "Disable color output")
+	device      = flag.String("interface", "eth0", "interface to listen on")
+)
 var (
 	// output is how we communicate with the user the main content
 	output io.Writer = os.Stdout
@@ -37,7 +39,6 @@ var (
 	// logger to show any
 	logger = zap.New(zap.NewTextEncoder())
 	// device is the listening interface to listen on
-	device            = "lo0"
 	snapshotLen int32 = 1024
 	timeout           = -1 * time.Second
 )
@@ -55,18 +56,19 @@ func (c *client) String() string {
 type clientResquestMap map[string]int32
 
 func main() {
+	flag.Parse()
 	if *flagNoColor {
 		color.NoColor = true // disables colorized output
 	}
 
-	scope, reporter, closer := RootScope()
+	scope, _, closer := RootScope()
 	defer closer.Close()
 
 	counter := scope.Tagged(map[string]string{
 		"cluster": "dev",
 	}).Counter("teesting_counter")
 
-	handle, err := pcap.OpenLive(device, snapshotLen, false /* promiscuous */, timeout)
+	handle, err := pcap.OpenLive(*device, snapshotLen, false /* promiscuous */, timeout)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -178,7 +180,7 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 
 	operation, found := rMap[client.String()]
 	if found && operation != 0 {
-		rStruct := zk.ResponceStructForOp(operation)
+		rStruct := zk.ResponseStructForOp(operation)
 		if _, err := zk.DecodePacket(buf[16:], rStruct); err != nil {
 			return errors.Wrapf(err, "responce struct attempt: %#v", buf)
 		}
