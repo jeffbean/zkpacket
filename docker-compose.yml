@@ -1,0 +1,15 @@
+version: '2'
+services:
+  zk:
+    image: "jplock/zookeeper:3.5.1-alpha"
+    ports: 
+      - 2181 
+  zkpacket:
+    build: .
+    network_mode: service:zk
+  zkload:
+    build: .
+    command: ./zkload/zkload --zk-host=zk
+    links: 
+      - zk
+  
