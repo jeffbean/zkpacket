@@ -8,3 +8,5 @@ import:
 - package: github.com/jeffbean/go-zookeeper
   subpackages:
   - zk
+- package: go.uber.org/zap
+  version: v1.0.0-rc.1

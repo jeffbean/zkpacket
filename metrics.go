@@ -1,36 +1,26 @@
 package main
 
-import (
-	"fmt"
-	"io"
-	"time"
+import "github.com/prometheus/client_golang/prometheus"
 
-	"github.com/uber-go/tally"
-	promreporter "github.com/uber-go/tally/prometheus"
+var (
+	getCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zk_get_op",
+			Help: "Number of Get operations.",
+		},
+		[]string{"operation"},
+	)
+	createCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zk_create_op",
+			Help: "Number of Create operations.",
+		},
+		[]string{"operation"},
+	)
 )
 
-type rootScopeFactory func() (tally.Scope, tally.CachedStatsReporter, io.Closer, error)
-
-// RootScope returns the provided metrics scope and stats reporter from the given factory
-func RootScope() (tally.Scope, tally.CachedStatsReporter, io.Closer) {
-	return newRootScope(getRootScope)
-}
-
-func newRootScope(scopeFactory rootScopeFactory) (tally.Scope, tally.CachedStatsReporter, io.Closer) {
-	scope, reporter, closer, err := scopeFactory()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to initialize metrics reporter %v", err))
-	}
-	return scope, reporter, closer
-}
-
-func getRootScope() (tally.Scope, tally.CachedStatsReporter, io.Closer, error) {
-	reporter := promreporter.NewReporter(promreporter.Options{})
-	scope, closer := tally.NewCachedRootScope("zkpacket",
-		map[string]string{},
-		reporter,
-		1*time.Second,
-		promreporter.DefaultSeparator,
-	)
-	return scope, reporter, closer, nil
+func init() {
+	// Metrics have to be registered to be exposed:
+	prometheus.MustRegister(getCounter)
+	prometheus.MustRegister(createCounter)
 }

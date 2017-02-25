@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
@@ -19,8 +20,8 @@ import (
 	"github.com/google/gopacket/pcap"
 	"github.com/jeffbean/go-zookeeper/zk"
 	"github.com/pkg/errors"
-	"github.com/uber-go/tally"
-	"github.com/uber-go/zap"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 )
 
 const zkDefaultPort = 2181
@@ -28,16 +29,18 @@ const zkDefaultPort = 2181
 var (
 	flagNoColor = flag.Bool("no-color", false, "Disable color output")
 	device      = flag.String("interface", "eth0", "interface to listen on")
-)
-var (
+
+	// metrics
+	addr = flag.String("listen-address", ":8080", "The address to listen on for HTTP requests.")
+
 	// output is how we communicate with the user the main content
 	output io.Writer = os.Stdout
 	// clientOutput is the clientside communication colored to be easy to read
 	clientOutput = color.New(color.FgYellow)
 	// serverOutput
 	serverOutput = color.New(color.FgBlue)
-	// logger to show any
-	logger = zap.New(zap.NewTextEncoder())
+	// logger to show any messages to the user
+	sugar *zap.SugaredLogger
 	// device is the listening interface to listen on
 	snapshotLen int32 = 1024
 	timeout           = -1 * time.Second
@@ -60,13 +63,11 @@ func main() {
 	if *flagNoColor {
 		color.NoColor = true // disables colorized output
 	}
+	logger, _ := zap.NewDevelopment()
+	sugar = logger.Sugar()
 
-	scope, _, closer := RootScope()
-	defer closer.Close()
-
-	counter := scope.Tagged(map[string]string{
-		"cluster": "dev",
-	}).Counter("teesting_counter")
+	http.Handle("/metrics", promhttp.Handler())
+	go http.ListenAndServe(*addr, nil)
 
 	handle, err := pcap.OpenLive(*device, snapshotLen, false /* promiscuous */, timeout)
 	if err != nil {
@@ -86,13 +87,13 @@ func main() {
 	// Loop through packets in file
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
-		if err := printPacketInfo(packet, rMap, counter); err != nil {
+		if err := printPacketInfo(packet, rMap); err != nil {
 			fmt.Fprintf(output, "error %v\n", err)
 		}
 	}
 }
 
-func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap, counter tally.Counter) error {
+func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap) error {
 	// Check for errors
 	if err := packet.ErrorLayer(); err != nil {
 		fmt.Fprintf(output, "Error decoding some part of the packet: %v", err)
@@ -114,7 +115,6 @@ func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap, counter tal
 	if applicationLayer != nil {
 		appPayload := applicationLayer.Payload()
 		if tcpLayer != nil && tcp != nil {
-			counter.Inc(1)
 			if tcp.SrcPort == zkDefaultPort {
 				if err := handleResponce(ip, tcp, appPayload[4:], rMap); err != nil {
 					return err
@@ -170,13 +170,13 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	// Thoery: This means the rest of the packet is blank
 	// Have not proven it with tests just yet
 	if header.Err < 0 {
-		logger.Debug("responce error", zap.Marshaler("header", header))
+		sugar.Debug("responce error", "header", header)
 		color.New(color.FgRed).Fprintf(output, "<= Server: %v\n", header)
 		return nil
 	}
 
 	client := &client{host: ip.SrcIP, port: tcp.DstPort, xid: header.Xid}
-	logger.Debug("decoded respnce", zap.Marshaler("header", header), zap.Object("client", client))
+	sugar.Debug("decoded respnce", "header", header, "client", client)
 
 	operation, found := rMap[client.String()]
 	if found && operation != 0 {

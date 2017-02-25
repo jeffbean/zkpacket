@@ -8,12 +8,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/grafana/grafana/pkg/cmd/grafana-cli/logger"
 	"github.com/jeffbean/go-zookeeper/zk"
-	"github.com/uber-go/zap"
+	"go.uber.org/zap"
 )
 
 var (
-	logger   = zap.New(zap.NewTextEncoder())
+	sugar    *zap.SugaredLogger
 	contents = []byte("hello")
 	zkHost   string
 )
@@ -28,7 +29,7 @@ func updateNodes(stopchan chan int, tickerChan <-chan time.Time, conn *zk.Conn, 
 		case <-tickerChan:
 			logger.Info("ticker tick", zap.Int64("conn", conn.SessionID()))
 			for _, node := range nodes {
-				logger.Info("creating node", zap.String("node", node), zap.Object("content", contents))
+				sugar.Info("creating node", "node", node, "content", contents)
 				conn.Create(node, contents, 0 /*flags */, zk.WorldACL(0x1f))
 			}
 		case <-stopchan:
@@ -49,6 +50,9 @@ func handleCtrlC(c chan os.Signal, quit chan int) {
 }
 
 func main() {
+	logger, _ := zap.NewDevelopment()
+	sugar = logger.Sugar()
+
 	quit := make(chan int)
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

@@ -1,14 +1,12 @@
-hash: 76ccdba99a3ac68f291c535c9e084e57992cd7e87ad717d2c270d546dc23291b
-updated: 2017-02-16T19:20:09.156445675-08:00
+hash: 8564e55d056a40f279588507cafa4420ea9c9e1c330209594c279cc29bbcf6a7
+updated: 2017-02-24T19:18:22.482171598-08:00
 imports:
 - name: github.com/beorn7/perks
   version: 4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9
   subpackages:
   - quantile
-- name: github.com/facebookgo/clock
-  version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/fatih/color
-  version: 5ec5d9d3c2cf82e9688b34e9bc27a94d616a7193
+  version: 7824417a424b65227be8ac9b14d545a7f3e6c3f0
 - name: github.com/golang/protobuf
   version: 8ee79997227bf9b34611aee7946ae64735e6fd93
   subpackages:
@@ -18,47 +16,57 @@ imports:
   subpackages:
   - layers
   - pcap
+- name: github.com/grafana/grafana
+  version: 05952688c53e9c4d144830d842af9ba565ddbde2
+  subpackages:
+  - pkg/cmd/grafana-cli/logger
 - name: github.com/jeffbean/go-zookeeper
   version: 30282bb899b4be1aa38341a3c3d1203db2657b21
   subpackages:
   - zk
 - name: github.com/mattn/go-colorable
   version: 5411d3eea5978e6cdc258b30de592b60df6aba96
+  repo: https://github.com/mattn/go-colorable
 - name: github.com/mattn/go-isatty
-  version: 281032e84ae07510239465db46bf442aa44b953a
+  version: dda3de49cbfcec471bd7a70e6cc01fcc3ff90109
+  repo: https://github.com/mattn/go-isatty
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
   - pbutil
 - name: github.com/pkg/errors
-  version: 248dadf4e9068a0b3e79f02ed0a610d935de5302
+  version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/prometheus/client_golang
-  version: c5b7fccd204277076155f10851dad72b76a49317
+  version: 69bb3870645f63c67a8dc9c9ef94585fd0d98c80
   subpackages:
   - prometheus
-  - prometheus/promhttp
 - name: github.com/prometheus/client_model
-  version: fa8ad6fec33561be4280a8f0514318c79d7f6cb6
+  version: 6f3806018612930941127f2a7c6c453ba2c527d2
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: dd2f054febf4a6c00f2343686efb775948a8bff4
+  version: 49fee292b27bfff7f354ee0f64e1bc4850462edf
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/prometheus/procfs
-  version: 1878d9fbb537119d24b21ca07effd591627cd160
-- name: github.com/uber-go/atomic
-  version: e682c1008ac17bf26d2e4b5ad6cdd08520ed0b22
-- name: github.com/uber-go/tally
-  version: 43c1379c0577ac1eb74f9f3869cea07191c9992b
+  version: a1dba9ce8baed984a2495b658c82687f8157b98f
   subpackages:
-  - prometheus
-- name: github.com/uber-go/zap
-  version: c064b5c44b285a7e2fd5c9b26e8c38228ce2bccb
+  - xfs
+- name: go.uber.org/atomic
+  version: 3b8db5e93c4c02efbc313e17b2e796b0914a01fb
+- name: go.uber.org/zap
+  version: 72313cde80537dd4dc9b7b80eda6d7ed796c4232
+  subpackages:
+  - buffer
+  - internal/bufferpool
+  - internal/exit
+  - internal/multierror
+  - zapcore
 - name: golang.org/x/sys
-  version: aaabbdc969c3935a2a7f61efac801e7163c73a2a
+  version: e24f485414aeafb646f6fca458b0bf869c0880a1
+  repo: https://go.googlesource.com/sys
   subpackages:
   - unix
 testImports: []

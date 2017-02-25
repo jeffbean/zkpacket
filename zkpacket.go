@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/jeffbean/go-zookeeper/zk"
-	"github.com/uber-go/zap"
+	"go.uber.org/zap"
 )
 
 type requestHeader struct {
