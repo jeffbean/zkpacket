@@ -18,6 +18,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"github.com/grafana/grafana/pkg/cmd/grafana-cli/logger"
 	"github.com/jeffbean/go-zookeeper/zk"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -31,7 +32,7 @@ var (
 	device      = flag.String("interface", "eth0", "interface to listen on")
 
 	// metrics
-	addr = flag.String("listen-address", ":8080", "The address to listen on for HTTP requests.")
+	addr = flag.String("listen-address", ":8085", "The address to listen on for HTTP requests.")
 
 	// output is how we communicate with the user the main content
 	output io.Writer = os.Stdout
@@ -41,6 +42,7 @@ var (
 	serverOutput = color.New(color.FgBlue)
 	// logger to show any messages to the user
 	sugar *zap.SugaredLogger
+	dl    = zap.NewAtomicLevel()
 	// device is the listening interface to listen on
 	snapshotLen int32 = 1024
 	timeout           = -1 * time.Second
@@ -63,7 +65,8 @@ func main() {
 	if *flagNoColor {
 		color.NoColor = true // disables colorized output
 	}
-	logger, _ := zap.NewDevelopment()
+	loggerConfig := zap.NewDevelopmentConfig()
+	logger, _ := loggerConfig.Build()
 	sugar = logger.Sugar()
 
 	http.Handle("/metrics", promhttp.Handler())
@@ -139,7 +142,9 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 	if _, err := zk.DecodePacket(buf[:8], header); err != nil {
 		return err
 	}
-
+	if header.Opcode == 11 {
+		return nil
+	}
 	client := &client{host: ip.SrcIP, port: tcp.SrcPort, xid: header.Xid}
 
 	rMap[client.String()] = header.Opcode
@@ -170,7 +175,7 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	// Thoery: This means the rest of the packet is blank
 	// Have not proven it with tests just yet
 	if header.Err < 0 {
-		sugar.Debug("responce error", "header", header)
+		logger.Debug("responce error", zap.Object("header", header))
 		color.New(color.FgRed).Fprintf(output, "<= Server: %v\n", header)
 		return nil
 	}

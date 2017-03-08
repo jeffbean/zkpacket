@@ -3,8 +3,9 @@ package main
 import (
 	"fmt"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/jeffbean/go-zookeeper/zk"
-	"go.uber.org/zap"
 )
 
 type requestHeader struct {
@@ -39,7 +40,7 @@ type watcherEvent struct {
 	Path  string
 }
 
-func (r *responseHeader) MarshalLog(kv zap.KeyValue) error {
+func (r *responseHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	kv.AddInt("xid", int(r.Xid))
 	kv.AddInt64("Zxid", r.Zxid)
 	kv.AddInt("errorCode", int(r.Err))
