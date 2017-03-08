@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,14 +24,19 @@ func init() {
 	flag.StringVar(&zkHost, "zk-host", "127.0.0.1", "Host address of zookeeper ensemble")
 }
 
-func updateNodes(stopchan chan int, tickerChan <-chan time.Time, conn *zk.Conn, nodes []string) {
+func updateNodes(stopchan chan int, tickerChan <-chan time.Time, conn *zk.Conn) {
+	// Create and seed the generator.
+	// Typically a non-fixed seed should be used, such as time.Now().UnixNano().
+	// Using a fixed seed will produce the same output on every run.
+	r := rand.New(rand.NewSource(99))
+
 	for {
 		select {
 		case <-tickerChan:
 			logger.Info("ticker tick", zap.Int64("conn", conn.SessionID()))
-			for _, node := range nodes {
-				sugar.Info("creating node", "node", node, "content", contents)
-				conn.Create(node, contents, 0 /*flags */, zk.WorldACL(0x1f))
+			for i := 0; i <= r.Intn(5); i++ {
+				node := fmt.Sprintf("/node/%v", r.Int31())
+				conn.Create(node, contents, 1 /*flags */, zk.WorldACL(0x1f))
 			}
 		case <-stopchan:
 			// stop
@@ -63,19 +69,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	conn2, _, err := zk.Connect([]string{zkHost}, time.Second)
-	if err != nil {
-		panic(err)
-	}
 
-	nodes := []string{
-		"/foo",
-		"/bar",
-	}
 	ticker := time.NewTicker(time.Second * 10).C
-	ticker2 := time.NewTicker(time.Second * 15).C
-	go updateNodes(quit, ticker, conn, nodes)
-	go updateNodes(quit, ticker2, conn2, nodes)
+
+	go updateNodes(quit, ticker, conn)
 	go handleCtrlC(c, quit)
 
 	select {}
