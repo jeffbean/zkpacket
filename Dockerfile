@@ -6,6 +6,6 @@ RUN curl https://glide.sh/get | sh
 COPY . /go/src/github.com/jeffbean/zkpacket
 WORKDIR /go/src/github.com/jeffbean/zkpacket
 
-RUN glide install
+# RUN glide install
 RUN go build && cd zkload && go build 
 CMD ["./zkpacket"]
