@@ -4,6 +4,7 @@ services:
     image: "jplock/zookeeper:3.5.1-alpha"
     expose: 
       - 2181 
+      - 8085
     ports:
       - 8085:8085
     logging: 
@@ -21,11 +22,18 @@ services:
     container_name: prometheus
     volumes:
       - ./prometheus/:/etc/prometheus/
+      - prometheus_data:/prometheus
+      - /etc/localtime:/etc/localtime:ro
     command:
       - '-config.file=/etc/prometheus/prometheus.yaml'
+      - '-storage.local.path=/prometheus'
+      - '-log.level=debug'
     expose:
       - 9090
     ports:
       - 9090:9090
     links:
-      - zk
+      - zk:zk
+volumes:
+    prometheus_data:
+

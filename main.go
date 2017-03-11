@@ -144,7 +144,7 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 	if _, err := zk.DecodePacket(buf[:8], header); err != nil {
 		return err
 	}
-	operationCounter.With(prometheus.Labels{"operation": string(header.Opcode)}).Inc()
+	operationCounter.With(prometheus.Labels{"operation": fmt.Sprintf("%v", header.Opcode)}).Inc()
 
 	if header.Opcode == 11 {
 		return nil
