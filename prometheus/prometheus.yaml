@@ -22,4 +22,4 @@ scrape_configs:
     scrape_timeout: 1s
 
     static_configs:
-         - targets: ['zkpacket:8085']
+         - targets: ['zk:8085']
