@@ -3,17 +3,18 @@ package main
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	getCounter = prometheus.NewCounterVec(
+	operationCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "zk_get_op",
-			Help: "Number of Get operations.",
+			Name: "zk_op_count",
+			Help: "Number of operations.",
 		},
 		[]string{"operation"},
 	)
-	createCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "zk_create_op",
-			Help: "Number of Create operations.",
+	operationHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "zk_op_duration_ms",
+			Help:    "The time for a given operation operation.",
+			Buckets: prometheus.ExponentialBuckets(1, 2, 10), // 10 buckets, each increasing by a factor of 2.
 		},
 		[]string{"operation"},
 	)
@@ -21,6 +22,6 @@ var (
 
 func init() {
 	// Metrics have to be registered to be exposed:
-	prometheus.MustRegister(getCounter)
-	prometheus.MustRegister(createCounter)
+	prometheus.MustRegister(operationCounter)
+	prometheus.MustRegister(operationHistogram)
 }

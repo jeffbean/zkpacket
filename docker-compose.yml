@@ -2,8 +2,12 @@ version: '2'
 services:
   zk:
     image: "jplock/zookeeper:3.5.1-alpha"
-    ports: 
+    expose: 
       - 2181 
+    ports:
+      - 8085:8085
+    logging: 
+      driver: none
   zkpacket:
     build: .
     network_mode: service:zk
@@ -12,31 +16,16 @@ services:
     command: ./zkload/zkload --zk-host=zk
     links: 
       - zk
-  cadvisor:
-    image: google/cadvisor
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:rw
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-    expose:
-      - 8080
   prometheus:
     image: prom/prometheus
     container_name: prometheus
     volumes:
       - ./prometheus/:/etc/prometheus/
-      - prometheus_data:/prometheus
     command:
-      - '-config.file=/etc/prometheus/prometheus.yml'
-      - '-storage.local.path=/prometheus'
-      - '-alertmanager.url=http://alertmanager:9093'
+      - '-config.file=/etc/prometheus/prometheus.yaml'
     expose:
       - 9090
     ports:
       - 9090:9090
     links:
-      - cadvisor:cadvisor
-    depends_on:
-      - cadvisor
-  
+      - zk

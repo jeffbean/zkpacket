@@ -35,7 +35,7 @@ func updateNodes(stopchan chan int, tickerChan <-chan time.Time, conn *zk.Conn) 
 		case <-tickerChan:
 			logger.Info("ticker tick", zap.Int64("conn", conn.SessionID()))
 			for i := 0; i <= r.Intn(5); i++ {
-				node := fmt.Sprintf("/node/%v", r.Int31())
+				node := fmt.Sprintf("/node-%v", r.Int31())
 				conn.Create(node, contents, 1 /*flags */, zk.WorldACL(0x1f))
 			}
 		case <-stopchan:

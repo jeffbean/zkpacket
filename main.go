@@ -21,6 +21,7 @@ import (
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/logger"
 	"github.com/jeffbean/go-zookeeper/zk"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
@@ -52,6 +53,7 @@ type client struct {
 	host net.IP
 	port layers.TCPPort
 	xid  int32
+	time time.Time
 }
 
 func (c *client) String() string {
@@ -142,6 +144,8 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 	if _, err := zk.DecodePacket(buf[:8], header); err != nil {
 		return err
 	}
+	operationCounter.With(prometheus.Labels{"operation": string(header.Opcode)}).Inc()
+
 	if header.Opcode == 11 {
 		return nil
 	}
@@ -179,9 +183,11 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		color.New(color.FgRed).Fprintf(output, "<= Server: %v\n", header)
 		return nil
 	}
-
+	if header.Xid == -2 {
+		return nil
+	}
 	client := &client{host: ip.SrcIP, port: tcp.DstPort, xid: header.Xid}
-	sugar.Debug("decoded respnce", "header", header, "client", client)
+	sugar.Debug("decoded responce", "header", header, "client", client)
 
 	operation, found := rMap[client.String()]
 	if found && operation != 0 {
