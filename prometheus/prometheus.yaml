@@ -16,7 +16,7 @@ scrape_configs:
     scrape_timeout: 1s
 
     static_configs:
-      - targets: ['zk:8085']
+      - targets: ['zk:8085', 'zk-2:8085', 'zk-3:8085']
 
   - job_name: 'prometheus'
     # Override the global default and scrape targets from this job every 5 seconds.
@@ -24,4 +24,4 @@ scrape_configs:
     scrape_timeout: 1s
 
     static_configs:
-      - targets: ['localhost:9090']
+      - targets: ['localhost:9090', cadvisor:8080]
