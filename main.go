@@ -204,6 +204,7 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 			return errors.Wrapf(err, "responce struct attempt: %#v", buf)
 		}
 		serverOutput.Fprintf(output, "<= Server: %#v\n", rStruct)
+		delete(rMap, client.String())
 		return nil
 	}
 

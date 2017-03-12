@@ -34,15 +34,15 @@ services:
     links:
       - zk:zk
   grafana:
-    image: grafana/grafana
+    image: grafana/grafana:4.1.2
     depends_on:
       - prometheus
     ports:
       - 3000:3000
     env_file:
-      - prometheus/config.monitoring
-    logging: 
-      driver: none
+      - grafana/config.monitoring
+    # logging: 
+    #   driver: none
 volumes:
     prometheus_data:
 

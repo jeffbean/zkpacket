@@ -9,15 +9,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/grafana/grafana/pkg/cmd/grafana-cli/logger"
 	"github.com/jeffbean/go-zookeeper/zk"
 	"go.uber.org/zap"
 )
 
 var (
-	sugar    *zap.SugaredLogger
-	contents = []byte("hello")
-	zkHost   string
+	logger    *zap.Logger
+	contents  = []byte("hello")
+	zkHost    string
+	frequency string
+	randSeed  int64
 )
 
 type znode struct{ path string }
@@ -28,18 +29,16 @@ func (z *znode) String() string {
 
 func init() {
 	flag.StringVar(&zkHost, "zk-host", "127.0.0.1", "Host address of zookeeper ensemble")
+	flag.StringVar(&frequency, "frequency", "1s", "How often to run a bunch of actions on a znode")
+	flag.Int64Var(&randSeed, "seed", time.Now().UnixNano(), "Optional seeded int64 for the randomness")
 }
 
-func updateNodes(stopchan chan int, conn *zk.Conn, tickerChan <-chan time.Time) {
-	// Create and seed the generator.
-	// Typically a non-fixed seed should be used, such as time.Now().UnixNano().
-	// Using a fixed seed will produce the same output on every run.
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+func updateNodes(stopchan chan int, r *rand.Rand, conn *zk.Conn, tickerChan <-chan time.Time) {
 
 	for {
 		select {
 		case <-tickerChan:
-			logger.Info("ticker tick", zap.Int64("conn", conn.SessionID()))
+			logger.Debug("ticker tick", zap.Int64("conn", conn.SessionID()))
 			node := &znode{fmt.Sprintf("/node-%v", r.Int31())}
 			_, err := conn.Create(node.String(), contents, 1 /*flags */, zk.WorldACL(0x1f))
 			if err != nil {
@@ -47,8 +46,7 @@ func updateNodes(stopchan chan int, conn *zk.Conn, tickerChan <-chan time.Time) 
 			}
 			_, _, err = conn.Get(node.String())
 			if err != nil {
-				logger.Errorf("failed to get node: %#v", node)
-				stopchan <- 1
+				logger.Error("failed to get node", zap.Stringer("node", node))
 			}
 		case <-stopchan:
 			// stop
@@ -68,23 +66,35 @@ func handleCtrlC(c chan os.Signal, quit chan int) {
 }
 
 func main() {
-	logger, _ := zap.NewDevelopmentConfig().Build()
-	sugar = logger.Sugar()
+	logger, _ = zap.NewDevelopmentConfig().Build()
 
 	quit := make(chan int)
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	flag.Parse()
+	freq, err := time.ParseDuration(frequency)
+	if err != nil {
+		logger.Fatal("failed to parse frequency duration")
+	}
 
 	conn, _, err := zk.Connect([]string{zkHost}, time.Second)
 	if err != nil {
 		panic(err)
 	}
 
-	ticker := time.NewTicker(time.Millisecond * 50).C
+	// Create and seed the generator.
+	// Typically a non-fixed seed should be used, such as time.Now().UnixNano().
+	// Using a fixed seed will produce the same output on every run.
+	r := rand.New(rand.NewSource(randSeed))
 
-	go updateNodes(quit, conn, ticker)
+	ticker := time.Tick(freq)
+	// r2 := rand.New(rand.NewSource(time.Now().UnixNano()))
+	// ticker2 := time.Tick(freq)
+	// go updateNodes(quit, r2, conn, ticker2)
+
+	go updateNodes(quit, r, conn, ticker)
+
 	go handleCtrlC(c, quit)
 
 	select {}
