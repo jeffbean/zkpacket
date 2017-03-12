@@ -18,7 +18,6 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
-	"github.com/grafana/grafana/pkg/cmd/grafana-cli/logger"
 	"github.com/jeffbean/go-zookeeper/zk"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,8 +41,8 @@ var (
 	// serverOutput
 	serverOutput = color.New(color.FgBlue)
 	// logger to show any messages to the user
-	sugar *zap.SugaredLogger
-	dl    = zap.NewAtomicLevel()
+	logger *zap.Logger
+	dl     = zap.NewAtomicLevel()
 	// device is the listening interface to listen on
 	snapshotLen int32 = 1024
 	timeout           = -1 * time.Second
@@ -53,14 +52,18 @@ type client struct {
 	host net.IP
 	port layers.TCPPort
 	xid  int32
-	time time.Time
+}
+
+type opTime struct {
+	time   time.Time
+	opCode int32
 }
 
 func (c *client) String() string {
 	return fmt.Sprintf("%v:%v:%v", c.host, c.port, c.xid)
 }
 
-type clientResquestMap map[string]int32
+type clientResquestMap map[string]*opTime
 
 func main() {
 	flag.Parse()
@@ -68,8 +71,7 @@ func main() {
 		color.NoColor = true // disables colorized output
 	}
 	loggerConfig := zap.NewDevelopmentConfig()
-	logger, _ := loggerConfig.Build()
-	sugar = logger.Sugar()
+	logger, _ = loggerConfig.Build()
 
 	http.Handle("/metrics", promhttp.Handler())
 	go http.ListenAndServe(*addr, nil)
@@ -121,12 +123,12 @@ func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap) error {
 		appPayload := applicationLayer.Payload()
 		if tcpLayer != nil && tcp != nil {
 			if tcp.SrcPort == zkDefaultPort {
-				if err := handleResponce(ip, tcp, appPayload[4:], rMap); err != nil {
+				if err := handleResponce(ip, tcp, appPayload[4:], rMap, packet.Metadata()); err != nil {
 					return err
 				}
 			}
 			if tcp.DstPort == zkDefaultPort {
-				if err := handleClient(ip, tcp, appPayload[4:], rMap); err != nil {
+				if err := handleClient(ip, tcp, appPayload[4:], rMap, packet.Metadata()); err != nil {
 					return err
 				}
 			}
@@ -136,7 +138,7 @@ func printPacketInfo(packet gopacket.Packet, rMap clientResquestMap) error {
 	return nil
 }
 
-func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap) error {
+func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, metaData *gopacket.PacketMetadata) error {
 	if ip == nil || tcp == nil {
 		return errors.New("ip or tcp layer not detected")
 	}
@@ -151,7 +153,7 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 	}
 	client := &client{host: ip.SrcIP, port: tcp.SrcPort, xid: header.Xid}
 
-	rMap[client.String()] = header.Opcode
+	rMap[client.String()] = &opTime{opCode: header.Opcode, time: metaData.Timestamp}
 	if header.Xid == 0 && header.Opcode == 0 {
 		res := &connectRequest{}
 		if _, err := zk.DecodePacket(buf, res); err != nil {
@@ -168,7 +170,7 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 	return nil
 }
 
-func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap) error {
+func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, packetTime *gopacket.PacketMetadata) error {
 	if ip == nil || tcp == nil {
 		return errors.New("ip or tcp layer not detected")
 	}
@@ -186,12 +188,18 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	if header.Xid == -2 {
 		return nil
 	}
-	client := &client{host: ip.SrcIP, port: tcp.DstPort, xid: header.Xid}
-	sugar.Debug("decoded responce", "header", header, "client", client)
+	client := &client{host: ip.DstIP, port: tcp.DstPort, xid: header.Xid}
 
 	operation, found := rMap[client.String()]
-	if found && operation != 0 {
-		rStruct := zk.ResponseStructForOp(operation)
+	if found && operation.opCode != 0 {
+		opSeconds := packetTime.Timestamp.Sub(operation.time).Seconds()
+		operationHistogram.With(
+			prometheus.Labels{"operation": fmt.Sprintf("%v", operation.opCode)},
+		).Observe(opSeconds)
+
+		logger.Info("op seconds ", zap.Float64("time", opSeconds), zap.Int32("op", operation.opCode))
+
+		rStruct := zk.ResponseStructForOp(operation.opCode)
 		if _, err := zk.DecodePacket(buf[16:], rStruct); err != nil {
 			return errors.Wrapf(err, "responce struct attempt: %#v", buf)
 		}

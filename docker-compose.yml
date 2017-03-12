@@ -7,8 +7,7 @@ services:
       - 8085
     ports:
       - 8085:8085
-    logging: 
-      driver: none
+
   zkpacket:
     build: .
     network_mode: service:zk
@@ -22,18 +21,28 @@ services:
     container_name: prometheus
     volumes:
       - ./prometheus/:/etc/prometheus/
-      - prometheus_data:/prometheus
+      # - prometheus_data:/prometheus
       - /etc/localtime:/etc/localtime:ro
     command:
       - '-config.file=/etc/prometheus/prometheus.yaml'
       - '-storage.local.path=/prometheus'
-      - '-log.level=debug'
+      - '-log.level=info'
     expose:
       - 9090
     ports:
       - 9090:9090
     links:
       - zk:zk
+  grafana:
+    image: grafana/grafana
+    depends_on:
+      - prometheus
+    ports:
+      - 3000:3000
+    env_file:
+      - prometheus/config.monitoring
+    logging: 
+      driver: none
 volumes:
     prometheus_data:
 

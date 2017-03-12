@@ -12,9 +12,8 @@ var (
 	)
 	operationHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "zk_op_duration_ms",
-			Help:    "The time for a given operation operation.",
-			Buckets: prometheus.ExponentialBuckets(1, 2, 10), // 10 buckets, each increasing by a factor of 2.
+			Name: "zk_op_seconds",
+			Help: "The time for a given operation operation.",
 		},
 		[]string{"operation"},
 	)
