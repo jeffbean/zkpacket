@@ -14,7 +14,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
@@ -29,18 +28,13 @@ import (
 const zkDefaultPort = 2181
 
 var (
-	flagNoColor = flag.Bool("no-color", false, "Disable color output")
-	device      = flag.String("interface", "eth0", "interface to listen on")
+	device = flag.String("interface", "eth0", "interface to listen on")
 
 	// metrics
 	addr = flag.String("listen-address", ":8085", "The address to listen on for HTTP requests.")
 
 	// output is how we communicate with the user the main content
 	output io.Writer = os.Stdout
-	// clientOutput is the clientside communication colored to be easy to read
-	clientOutput = color.New(color.FgYellow)
-	// serverOutput
-	serverOutput = color.New(color.FgBlue)
 	// logger to show any messages to the user
 	logger *zap.Logger
 	dl     = zap.NewAtomicLevel()
@@ -78,9 +72,6 @@ type clientResquestMap map[string]*opTime
 
 func main() {
 	flag.Parse()
-	if *flagNoColor {
-		color.NoColor = true // disables colorized output
-	}
 	loggerConfig := zap.NewDevelopmentConfig()
 	loggerConfig.EncoderConfig = zapcore.EncoderConfig{
 		LevelKey:      "L",
