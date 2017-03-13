@@ -1,12 +1,10 @@
 hash: b66b450e428bb87b8a27c28a1214d0b7cd3a36ee81bee27c2f9c3f040e136aa0
-updated: 2017-03-08T06:23:20.243958119-08:00
+updated: 2017-03-13T13:09:30.970946159-07:00
 imports:
 - name: github.com/beorn7/perks
   version: 4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9
   subpackages:
   - quantile
-- name: github.com/fatih/color
-  version: 7824417a424b65227be8ac9b14d545a7f3e6c3f0
 - name: github.com/golang/protobuf
   version: 8ee79997227bf9b34611aee7946ae64735e6fd93
   subpackages:
@@ -16,20 +14,10 @@ imports:
   subpackages:
   - layers
   - pcap
-- name: github.com/grafana/grafana
-  version: 05952688c53e9c4d144830d842af9ba565ddbde2
-  subpackages:
-  - pkg/cmd/grafana-cli/logger
 - name: github.com/jeffbean/go-zookeeper
   version: 30282bb899b4be1aa38341a3c3d1203db2657b21
   subpackages:
   - zk
-- name: github.com/mattn/go-colorable
-  version: 5411d3eea5978e6cdc258b30de592b60df6aba96
-  repo: https://github.com/mattn/go-colorable
-- name: github.com/mattn/go-isatty
-  version: dda3de49cbfcec471bd7a70e6cc01fcc3ff90109
-  repo: https://github.com/mattn/go-isatty
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
@@ -57,7 +45,7 @@ imports:
   subpackages:
   - xfs
 - name: go.uber.org/atomic
-  version: 0c9e689d64f004564b79d9a663634756df322902
+  version: 3b8db5e93c4c02efbc313e17b2e796b0914a01fb
 - name: go.uber.org/zap
   version: 4e517d38b2138e59475d6468e7a6b626eecdaa66
   subpackages:
@@ -67,9 +55,4 @@ imports:
   - internal/exit
   - internal/multierror
   - zapcore
-- name: golang.org/x/sys
-  version: e24f485414aeafb646f6fca458b0bf869c0880a1
-  repo: https://go.googlesource.com/sys
-  subpackages:
-  - unix
 testImports: []

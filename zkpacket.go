@@ -236,7 +236,6 @@ func (r *multiHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 func (r *watcherEvent) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	kv.AddInt32("type", int32(r.Type))
 	kv.AddString("path", r.Path)
-	kv.AddObject("state", r.State)
 	return nil
 }
 
