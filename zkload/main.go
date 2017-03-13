@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeffbean/go-zookeeper/zk"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -29,7 +30,7 @@ func (z *znode) String() string {
 
 func init() {
 	flag.StringVar(&zkHost, "zk-host", "127.0.0.1", "Host address of zookeeper ensemble")
-	flag.StringVar(&frequency, "frequency", "1s", "How often to run a bunch of actions on a znode")
+	flag.StringVar(&frequency, "frequency", "3s", "How often to run a bunch of actions on a znode")
 	flag.Int64Var(&randSeed, "seed", time.Now().UnixNano(), "Optional seeded int64 for the randomness")
 }
 
@@ -38,15 +39,41 @@ func updateNodes(stopchan chan int, r *rand.Rand, conn *zk.Conn, tickerChan <-ch
 	for {
 		select {
 		case <-tickerChan:
-			logger.Debug("ticker tick", zap.Int64("conn", conn.SessionID()))
+			// logger.Debug("ticker tick", zap.Int64("conn", conn.SessionID()))
 			node := &znode{fmt.Sprintf("/node-%v", r.Int31())}
-			_, err := conn.Create(node.String(), contents, 1 /*flags */, zk.WorldACL(0x1f))
-			if err != nil {
-				panic(err)
+
+			// if _, err := conn.Create(node.String(), contents, 1 /*flags */, zk.WorldACL(0x1f)); err != nil {
+			// 	logger.Error("failed to create node", zap.Error(err), zap.Stringer("node", node))
+			// }
+			// if _, _, err := conn.Get(node.String()); err != nil {
+			// 	logger.Error("failed to get", zap.Stringer("node", node), zap.Error(err))
+			// }
+			// if _, _, err := conn.Exists(node.String()); err != nil {
+			// 	logger.Error("failed to Exists", zap.Stringer("node", node), zap.Error(err))
+			// }
+			// if _, _, err := conn.GetACL(node.String()); err != nil {
+			// 	logger.Error("failed to get ACL", zap.Stringer("node", node), zap.Error(err))
+			// }
+			// if _, err := conn.SetACL(node.String(), zk.WorldACL(0x1f), 0 /* version */); err != nil {
+			// 	logger.Error("failed to set ACL", zap.Stringer("node", node), zap.Error(err))
+			// }
+			// if _, _, err := conn.GetACL(node.String()); err != nil {
+			// 	logger.Error("failed to get ACL", zap.Stringer("node", node), zap.Error(err))
+			// }
+			// if _, _, err := conn.Children(node.String()); err != nil {
+			// 	logger.Error("failed to get children", zap.Stringer("node", node), zap.Error(err))
+			// }
+			// if _, err := conn.Set(node.String(), []byte("i want to set this now"), 0 /* version */); err != nil {
+			// 	logger.Error("failed to Set", zap.Stringer("node", node), zap.Error(err))
+			// }
+			ops := []interface{}{
+				&zk.CreateRequest{Path: node.String(), Data: []byte{1, 2, 3, 4}, Acl: zk.WorldACL(zk.PermAll)},
+				&zk.SetDataRequest{Path: node.String(), Data: []byte{1, 2, 3, 4, 5}, Version: -1},
 			}
-			_, _, err = conn.Get(node.String())
-			if err != nil {
-				logger.Error("failed to get node", zap.Stringer("node", node))
+			if res, err := conn.Multi(ops...); err != nil {
+				logger.Error("Multi returned error", zap.Error(err), zap.Stringer("node", node))
+			} else if len(res) != 2 {
+				logger.Error("Expected 2 responses", zap.Int("actual", len(res)))
 			}
 		case <-stopchan:
 			// stop
@@ -66,7 +93,17 @@ func handleCtrlC(c chan os.Signal, quit chan int) {
 }
 
 func main() {
-	logger, _ = zap.NewDevelopmentConfig().Build()
+	loggerConfig := zap.NewDevelopmentConfig()
+	loggerConfig.EncoderConfig = zapcore.EncoderConfig{
+		LevelKey:      "L",
+		TimeKey:       "",
+		MessageKey:    "M",
+		NameKey:       "N",
+		CallerKey:     "C",
+		StacktraceKey: "S",
+		EncodeLevel:   zapcore.CapitalColorLevelEncoder,
+	}
+	logger, _ = loggerConfig.Build()
 
 	quit := make(chan int)
 	c := make(chan os.Signal)
@@ -78,7 +115,7 @@ func main() {
 		logger.Fatal("failed to parse frequency duration")
 	}
 
-	conn, _, err := zk.Connect([]string{zkHost}, time.Second)
+	conn, _, err := zk.Connect([]string{zkHost}, 3*time.Second)
 	if err != nil {
 		panic(err)
 	}
