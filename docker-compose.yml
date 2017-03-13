@@ -7,8 +7,8 @@ services:
     expose: 
       - 2181 
       - 8085
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - 8085:8085
   zkpacket:
     build: 
       dockerfile: docker/Dockerfile.zkpacket
@@ -20,16 +20,15 @@ services:
     links:
       - zk
   prometheus:
-    image: prom/prometheus
-    container_name: prometheus
+    image: prom/prometheus:v1.5.2
     volumes:
       - ./prometheus/:/etc/prometheus/
-      # - prometheus_data:/prometheus
-      - /etc/localtime:/etc/localtime:ro
+      - prometheus_data:/prometheus
+      # - /etc/localtime:/etc/localtime:ro
     command:
       - '-config.file=/etc/prometheus/prometheus.yaml'
       - '-storage.local.path=/prometheus'
-      - '-log.level=info'
+      - '-log.level=debug'
     expose:
       - 9090
     ports:

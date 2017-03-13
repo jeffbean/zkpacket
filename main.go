@@ -61,6 +61,13 @@ type client struct {
 type opTime struct {
 	time   time.Time
 	opCode OpType
+	watch  bool
+}
+
+func (o *opTime) MarshalLogObject(kv zapcore.ObjectEncoder) error {
+	kv.AddString("opName", o.opCode.String())
+	kv.AddBool("watch", o.watch)
+	return nil
 }
 
 func (c *client) String() string {
@@ -172,43 +179,82 @@ func processZookeeperPackets(packet gopacket.Packet, rMap clientResquestMap) {
 func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, metaData *gopacket.PacketMetadata) error {
 	header := &requestHeader{}
 	if _, err := zk.DecodePacket(buf[:8], header); err != nil {
-		logger.Error("failed to decode header", zap.Error(err), zap.Binary("first-eight-bytes", buf[:8]))
+		logger.Error("--> failed to decode header", zap.Error(err), zap.Binary("first-eight-bytes", buf[:8]))
 		return err
 	}
-
-	operationCounter.With(prometheus.Labels{"operation": header.Opcode.String()}).Inc()
 
 	// This is the pingRequest. lets ignore for now after counting the stat
 	if header.Opcode == OpPing {
 		return nil
 	}
+	// logger.Debug("--> client request found", zap.Object("header", header))
 
 	client := &client{host: ip.SrcIP, port: tcp.SrcPort, xid: header.Xid}
-
-	rMap[client.String()] = &opTime{opCode: header.Opcode, time: metaData.Timestamp}
-	if header.Xid == 0 && header.Opcode == 0 {
-		res := &connectRequest{}
-		if _, err := zk.DecodePacket(buf, res); err != nil {
+	trackingOperation := &opTime{opCode: header.Opcode, time: metaData.Timestamp}
+	// This section is breaking up how to process different request types all based on the header operation
+	// We have a few special cases where we want to see metrics for watchs and multi operations
+	switch header.Opcode {
+	case OpPing:
+	case OpNotify:
+		if header.Xid == 0 {
+			res := &connectRequest{}
+			if _, err := zk.DecodePacket(buf, res); err != nil {
+				return err
+			}
+			logger.Info("---> client connect", zap.Reflect("res", res), zap.Object("header", header))
+		}
+		res, err := processOperation(header.Opcode, buf[8:], zk.RequestStructForOp)
+		if err != nil {
 			return err
 		}
-		// clientOutput.Fprintf(output, "xxx> Connect Client: %#v\n", res)
-		return nil
-	}
-
-	if header.Opcode == OpMulti {
+		logger.Debug("--> client notify result", zap.Object("header", header), zap.Any("result", res))
+	case OpMulti:
 		res, err := processMultiOperation(buf[8:])
 		if err != nil {
 			return err
 		}
-		logger.Debug("client multi request", zap.Reflect("res", res), zap.Object("header", header))
-		return nil
+		logger.Debug("--> client multi request", zap.Reflect("res", res), zap.Object("header", header))
+	case OpGetData:
+		getData := &getDataRequest{}
+		_, err := zk.DecodePacket(buf[8:], getData)
+		if err != nil {
+			return err
+		}
+		if getData.Watch {
+			logger.Debug("I made it to a watch notification")
+			trackingOperation = &opTime{opCode: OpType(opGetDataW), time: metaData.Timestamp}
+		}
+		logger.Debug("--> client getData request", zap.Object("header", header), zap.Any("result", getData), zap.Object("trackingOp", trackingOperation))
+	case OpGetChildren2:
+		getData := &getChildren2Request{}
+		_, err := zk.DecodePacket(buf[8:], getData)
+		if err != nil {
+			return err
+		}
+		if getData.Watch {
+			trackingOperation.opCode = OpType(opGetChildren2W)
+		}
+		logger.Debug("--> client getChildren2Request request", zap.Object("header", header), zap.Any("result", getData))
+	case OpExists:
+		req := &existsRequest{}
+		_, err := zk.DecodePacket(buf[8:], req)
+		if err != nil {
+			return err
+		}
+		if req.Watch {
+			trackingOperation.opCode = OpType(opExistsW)
+		}
+		logger.Debug("--> client getExist request", zap.Object("header", header), zap.Any("result", req))
+	default:
+		res, err := processOperation(header.Opcode, buf[8:], zk.RequestStructForOp)
+		if err != nil {
+			return err
+		}
+		logger.Debug("--> client request result", zap.Object("header", header), zap.Any("result", res))
 	}
+	rMap[client.String()] = trackingOperation
+	operationCounter.With(prometheus.Labels{"operation": trackingOperation.opCode.String()}).Inc()
 
-	res, err := processOperation(header.Opcode, buf[8:])
-	if err != nil {
-		return err
-	}
-	logger.Debug("client", zap.Object("header", header), zap.Any("result", res))
 	return nil
 }
 
@@ -220,7 +266,7 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	// Thoery: This means the rest of the packet is blank
 	// Have not proven it with tests just yet
 	if header.Err < 0 {
-		logger.Error("responce error", zap.Object("header", header))
+		logger.Error("<-- responce error", zap.Object("header", header))
 		return nil
 	}
 
@@ -228,14 +274,33 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	if header.Xid == -2 {
 		return nil
 	}
+	switch header.Xid {
+	case 0:
+		res := &connectResponse{}
+		if _, err := zk.DecodePacket(buf, res); err != nil {
+			return err
+		}
+		logger.Debug("<-- connect", zap.Stringer("src", ip.SrcIP), zap.Any("responce", res))
+		// serverOutput.Fprintf(output, "<xxx Server connect: %#v\n", res)
+		return nil
+	case -1:
+		// Watch event
+		// TODO: Impliment watch tracking
+		// logger.Warn("This code is condition ground zero")
+		res := &watcherEvent{}
+		_, err := zk.DecodePacket(buf[16:], res)
+		if err != nil {
+			return err
+		}
+		logger.Info("<-- watcher event notification", zap.Any("res", res))
+	}
 
 	client := &client{host: ip.DstIP, port: tcp.DstPort, xid: header.Xid}
-
+	// see if we have a client request for this server reply
 	operation, found := rMap[client.String()]
-	logger.Debug("op seconds",
+	logger.Debug("<-- server client operation found",
 		zap.Object("header", header),
 		zap.Stringer("src", ip.SrcIP),
-		zap.Any("op", operation.opCode),
 		zap.Stringer("client", client),
 	)
 	if found && operation.opCode != 0 {
@@ -244,49 +309,32 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		operationHistogram.With(
 			prometheus.Labels{"operation": operation.opCode.String()},
 		).Observe(opSeconds)
-
-		if operation.opCode == OpMulti {
+		switch operation.opCode {
+		case OpMulti:
 			res, err := processMultiOperation(buf[16:])
 			if err != nil {
 				return err
 			}
-			logger.Debug("multi responce", zap.Reflect("res", res), zap.Object("op", operation.opCode))
-			return nil
+			logger.Debug("<-- multi responce", zap.Reflect("res", res), zap.Object("op", operation.opCode))
+		default:
+			res, err := processOperation(operation.opCode, buf[16:], zk.ResponseStructForOp)
+			if err != nil {
+				return err
+			}
+			logger.Debug("<-- server responce", zap.Any("struct", res), zap.Object("header", header))
 		}
-		res, err := processOperation(operation.opCode, buf[16:])
-		if err != nil {
-			return err
-		}
-		logger.Debug("server responce", zap.Any("struct", res))
 		delete(rMap, client.String())
 		return nil
 	}
-
-	switch header.Xid {
-	case 0:
-		res := &connectResponse{}
-		if _, err := zk.DecodePacket(buf, res); err != nil {
-			return err
-		}
-		logger.Debug("connect", zap.Stringer("src", ip.SrcIP), zap.Any("responce", res))
-		// serverOutput.Fprintf(output, "<xxx Server connect: %#v\n", res)
-		return nil
-	case -1:
-		// Watch event
-		// TODO: Impliment watch tracking
-	default:
-		logger.Warn("default xid from unknown client", zap.Object("header", header))
-	}
-
 	return nil
 }
 
-func processOperation(op OpType, buf []byte) (interface{}, error) {
-	rStruct := zk.ResponseStructForOp(int32(op))
-	logger.Debug("found struct for operation", zap.Object("op", op), zap.Reflect("struct", rStruct))
+func processOperation(op OpType, buf []byte, cb func(int32) interface{}) (interface{}, error) {
+	rStruct := cb(int32(op))
+	// logger.Debug("found struct for operation", zap.Object("op", op), zap.Reflect("struct", rStruct))
 
 	if _, err := zk.DecodePacket(buf, rStruct); err != nil {
-		logger.Error("failed to process operation", zap.Error(err), zap.Object("op", op), zap.Binary("payload", buf))
+		logger.Error("failed to decode struct", zap.Error(err), zap.Object("op", op), zap.Binary("payload", buf))
 		return rStruct, err
 	}
 	return rStruct, nil
@@ -295,10 +343,10 @@ func processOperation(op OpType, buf []byte) (interface{}, error) {
 func processMultiOperation(buf []byte) (*multiResponse, error) {
 	mHeader := &multiResponse{}
 
-	offset, err := mHeader.Decode(buf)
+	_, err := mHeader.Decode(buf)
 	if err != nil {
 		return nil, err
 	}
-	logger.Debug("process multi operation", zap.Int("offset", offset), zap.Any("multiResponse", mHeader))
+	// logger.Debug("process multi operation", zap.Int("offset", offset), zap.Any("multiResponse", mHeader))
 	return mHeader, nil
 }

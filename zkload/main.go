@@ -30,7 +30,7 @@ func (z *znode) String() string {
 
 func init() {
 	flag.StringVar(&zkHost, "zk-host", "127.0.0.1", "Host address of zookeeper ensemble")
-	flag.StringVar(&frequency, "frequency", "3s", "How often to run a bunch of actions on a znode")
+	flag.StringVar(&frequency, "frequency", "10s", "How often to run a bunch of actions on a znode")
 	flag.Int64Var(&randSeed, "seed", time.Now().UnixNano(), "Optional seeded int64 for the randomness")
 }
 
@@ -41,40 +41,49 @@ func updateNodes(stopchan chan int, r *rand.Rand, conn *zk.Conn, tickerChan <-ch
 		case <-tickerChan:
 			// logger.Debug("ticker tick", zap.Int64("conn", conn.SessionID()))
 			node := &znode{fmt.Sprintf("/node-%v", r.Int31())}
-
-			// if _, err := conn.Create(node.String(), contents, 1 /*flags */, zk.WorldACL(0x1f)); err != nil {
-			// 	logger.Error("failed to create node", zap.Error(err), zap.Stringer("node", node))
+			if _, err := conn.Create(node.String(), contents, 1 /*flags */, zk.WorldACL(0x1f)); err != nil {
+				logger.Error("failed to create node", zap.Error(err), zap.Stringer("node", node))
+			}
+			_, _, _, err := conn.GetW(node.String())
+			if err != nil {
+				logger.Error("failed to GetW", zap.Stringer("node", node), zap.Error(err))
+			}
+			if _, _, err := conn.Get(node.String()); err != nil {
+				logger.Error("failed to get", zap.Stringer("node", node), zap.Error(err))
+			}
+			if _, _, err := conn.Exists(node.String()); err != nil {
+				logger.Error("failed to Exists", zap.Stringer("node", node), zap.Error(err))
+			}
+			if _, _, err := conn.GetACL(node.String()); err != nil {
+				logger.Error("failed to get ACL", zap.Stringer("node", node), zap.Error(err))
+			}
+			if _, err := conn.SetACL(node.String(), zk.WorldACL(0x1f), 0 /* version */); err != nil {
+				logger.Error("failed to set ACL", zap.Stringer("node", node), zap.Error(err))
+			}
+			if _, _, err := conn.GetACL(node.String()); err != nil {
+				logger.Error("failed to get ACL", zap.Stringer("node", node), zap.Error(err))
+			}
+			if _, _, err := conn.Children(node.String()); err != nil {
+				logger.Error("failed to get children", zap.Stringer("node", node), zap.Error(err))
+			}
+			if _, err := conn.Set(node.String(), []byte("i want to set this now"), -1 /* version */); err != nil {
+				logger.Error("failed to Set", zap.Stringer("node", node), zap.Error(err))
+			}
+			// _, _, _, err = conn.GetW(node.String())
+			// if err != nil {
+			// 	logger.Error("failed to GetW", zap.Stringer("node", node), zap.Error(err))
 			// }
-			// if _, _, err := conn.Get(node.String()); err != nil {
-			// 	logger.Error("failed to get", zap.Stringer("node", node), zap.Error(err))
-			// }
-			// if _, _, err := conn.Exists(node.String()); err != nil {
-			// 	logger.Error("failed to Exists", zap.Stringer("node", node), zap.Error(err))
-			// }
-			// if _, _, err := conn.GetACL(node.String()); err != nil {
-			// 	logger.Error("failed to get ACL", zap.Stringer("node", node), zap.Error(err))
-			// }
-			// if _, err := conn.SetACL(node.String(), zk.WorldACL(0x1f), 0 /* version */); err != nil {
-			// 	logger.Error("failed to set ACL", zap.Stringer("node", node), zap.Error(err))
-			// }
-			// if _, _, err := conn.GetACL(node.String()); err != nil {
-			// 	logger.Error("failed to get ACL", zap.Stringer("node", node), zap.Error(err))
-			// }
-			// if _, _, err := conn.Children(node.String()); err != nil {
-			// 	logger.Error("failed to get children", zap.Stringer("node", node), zap.Error(err))
-			// }
-			// if _, err := conn.Set(node.String(), []byte("i want to set this now"), 0 /* version */); err != nil {
-			// 	logger.Error("failed to Set", zap.Stringer("node", node), zap.Error(err))
-			// }
+			multiNode := &znode{fmt.Sprintf("/multinode-%v", r.Int31())}
 			ops := []interface{}{
-				&zk.CreateRequest{Path: node.String(), Data: []byte{1, 2, 3, 4}, Acl: zk.WorldACL(zk.PermAll)},
-				&zk.SetDataRequest{Path: node.String(), Data: []byte{1, 2, 3, 4, 5}, Version: -1},
+				&zk.CreateRequest{Path: multiNode.String(), Data: []byte{1, 2, 3, 4}, Acl: zk.WorldACL(zk.PermAll)},
+				&zk.SetDataRequest{Path: multiNode.String(), Data: []byte{1, 2, 3, 4, 5}, Version: -1},
 			}
 			if res, err := conn.Multi(ops...); err != nil {
 				logger.Error("Multi returned error", zap.Error(err), zap.Stringer("node", node))
 			} else if len(res) != 2 {
 				logger.Error("Expected 2 responses", zap.Int("actual", len(res)))
 			}
+
 		case <-stopchan:
 			// stop
 			logger.Info("stopping node routine")
@@ -129,7 +138,7 @@ func main() {
 	// r2 := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// ticker2 := time.Tick(freq)
 	// go updateNodes(quit, r2, conn, ticker2)
-
+	time.Sleep(5 * time.Second)
 	go updateNodes(quit, r, conn, ticker)
 
 	go handleCtrlC(c, quit)

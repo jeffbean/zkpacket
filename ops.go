@@ -18,24 +18,25 @@ const (
 
 	OpExists
 	OpGetData
-	OpSetData
+	OpSetData // 5
 
 	OpGetACL
 	OpSetACL
 	OpGetChildren
+	OpSync // 9
 
-	OpSync
-
-	OpPing OpType = iota + 1
+	OpPing OpType = iota + 1 // 11
 	OpGetChildren2
 	OpCheck
 	OpMulti
-	OpCreate2
+
+	OpCreate2 // 15
 	OpReconfig
 	OpCheckWatches
 	OpRemoveWatches
 	OpCreateContainer
-	OpDeleteContainer
+
+	OpDeleteContainer // 20
 	OpCreateTTL
 
 	OpCreateSession OpType = -12

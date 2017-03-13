@@ -37,6 +37,16 @@ type connectResponse struct {
 	Passwd          []byte
 }
 
+type pathWatchRequest struct {
+	Path  string
+	Watch bool
+}
+
+// We special case these so we track if these are watching actions
+type existsRequest pathWatchRequest
+type getDataRequest pathWatchRequest
+type getChildren2Request pathWatchRequest
+
 type multiHeader struct {
 	Type OpType
 	Done bool
@@ -59,6 +69,19 @@ type watcherEvent struct {
 	Type  zk.EventType
 	State zk.State
 	Path  string
+}
+
+type watchType int
+
+const (
+	watchTypeData = iota
+	watchTypeExist
+	watchTypeChild
+)
+
+type watchPathType struct {
+	path  string
+	wType watchType
 }
 
 type decoder interface {
@@ -197,14 +220,23 @@ func (r *responseHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 func (r *requestHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	kv.AddInt("xid", int(r.Xid))
 	kv.AddInt32("opcode", int32(r.Opcode))
+	kv.AddString("opName", r.Opcode.String())
 	return nil
 }
 
 func (r *multiHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	kv.AddBool("done", r.Done)
 	kv.AddInt32("opcode", int32(r.Type))
+	kv.AddString("opName", r.Type.String())
 	kv.AddInt("errorCode", int(r.Err))
 	kv.AddString("errorMsg", errCodeToMessage(r.Err))
+	return nil
+}
+
+func (r *watcherEvent) MarshalLogObject(kv zapcore.ObjectEncoder) error {
+	kv.AddInt32("type", int32(r.Type))
+	kv.AddString("path", r.Path)
+	kv.AddObject("state", r.State)
 	return nil
 }
 
