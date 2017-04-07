@@ -34,6 +34,16 @@ func init() {
 	flag.Int64Var(&randSeed, "seed", time.Now().UnixNano(), "Optional seeded int64 for the randomness")
 }
 
+func printWatchEvents(eventChan <-chan zk.Event) {
+	select {
+	case ev := <-eventChan:
+		if ev.Err != nil {
+			logger.Error("event error", zap.Error(ev.Err))
+		}
+		logger.Info("EVENT!", zap.Any("event", ev))
+	}
+}
+
 func updateNodes(stopchan chan int, r *rand.Rand, conn *zk.Conn, tickerChan <-chan time.Time) {
 
 	for {
@@ -44,10 +54,11 @@ func updateNodes(stopchan chan int, r *rand.Rand, conn *zk.Conn, tickerChan <-ch
 			if _, err := conn.Create(node.String(), contents, 1 /*flags */, zk.WorldACL(0x1f)); err != nil {
 				logger.Error("failed to create node", zap.Error(err), zap.Stringer("node", node))
 			}
-			_, _, _, err := conn.GetW(node.String())
+			_, _, eventChan, err := conn.GetW(node.String())
 			if err != nil {
 				logger.Error("failed to GetW", zap.Stringer("node", node), zap.Error(err))
 			}
+			go printWatchEvents(eventChan)
 			if _, _, err := conn.Get(node.String()); err != nil {
 				logger.Error("failed to get", zap.Stringer("node", node), zap.Error(err))
 			}
@@ -69,10 +80,10 @@ func updateNodes(stopchan chan int, r *rand.Rand, conn *zk.Conn, tickerChan <-ch
 			if _, err := conn.Set(node.String(), []byte("i want to set this now"), -1 /* version */); err != nil {
 				logger.Error("failed to Set", zap.Stringer("node", node), zap.Error(err))
 			}
-			// _, _, _, err = conn.GetW(node.String())
-			// if err != nil {
-			// 	logger.Error("failed to GetW", zap.Stringer("node", node), zap.Error(err))
-			// }
+			_, _, _, err = conn.GetW(node.String())
+			if err != nil {
+				logger.Error("failed to GetW", zap.Stringer("node", node), zap.Error(err))
+			}
 			multiNode := &znode{fmt.Sprintf("/multinode-%v", r.Int31())}
 			ops := []interface{}{
 				&zk.CreateRequest{Path: multiNode.String(), Data: []byte{1, 2, 3, 4}, Acl: zk.WorldACL(zk.PermAll)},
@@ -128,6 +139,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer conn.Close()
 
 	// Create and seed the generator.
 	// Typically a non-fixed seed should be used, such as time.Now().UnixNano().

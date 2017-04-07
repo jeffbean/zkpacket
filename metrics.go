@@ -8,7 +8,7 @@ var (
 			Name: "zk_op_count",
 			Help: "Number of operations.",
 		},
-		[]string{"operation"},
+		[]string{"operation", "direction"},
 	)
 	operationHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -17,10 +17,18 @@ var (
 		},
 		[]string{"operation"},
 	)
+	packetSizeHistogram = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "packet_size",
+			Help:    "The raw packetsize given in the first 4 bytes of each packet",
+			Buckets: prometheus.ExponentialBuckets(2 /* start */, 2 /* factor */, 10 /* count */),
+		},
+	)
 )
 
 func init() {
 	// Metrics have to be registered to be exposed:
 	prometheus.MustRegister(operationCounter)
 	prometheus.MustRegister(operationHistogram)
+	prometheus.MustRegister(packetSizeHistogram)
 }

@@ -49,6 +49,11 @@ const (
 	OpSetAuth    OpType = 100
 	OpSetWatches OpType = 101
 	OpSasl       OpType = 102
+	// private ops to represent watch operations
+	opGetDataW      OpType = 200
+	opExistsW       OpType = 201
+	opGetChildren2W OpType = 202
+
 	// OpError is for specifying errors
 	OpError OpType = -1
 )

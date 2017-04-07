@@ -52,18 +52,6 @@ type client struct {
 	xid  int32
 }
 
-type opTime struct {
-	time   time.Time
-	opCode OpType
-	watch  bool
-}
-
-func (o *opTime) MarshalLogObject(kv zapcore.ObjectEncoder) error {
-	kv.AddString("opName", o.opCode.String())
-	kv.AddBool("watch", o.watch)
-	return nil
-}
-
 func (c *client) String() string {
 	return fmt.Sprintf("%v:%v:%v", c.host, c.port, c.xid)
 }
@@ -111,6 +99,50 @@ func main() {
 	}
 }
 
+func processZookeeperPackets(packet gopacket.Packet, rMap clientResquestMap) {
+	// In this hot path we want to return as soon as we know anything is not going through
+
+	// Check for errors
+	if err := packet.ErrorLayer(); err != nil {
+		logger.Error("error layer found in packet", zap.Error(err.Error()))
+		return
+	}
+
+	tcp, ip, err := castLayers(packet)
+	if err != nil {
+		logger.Error("failed casting required packet layers", zap.Error(err))
+		return
+	}
+
+	applicationLayer := packet.ApplicationLayer()
+	if applicationLayer == nil {
+		// We dont log here since this can be a multitide of packets
+		return
+	}
+	appPayload := applicationLayer.Payload()
+
+	// For Zookeeper the first 4 bytes is the payload size. We ignore it for now.
+	// TODO: convert byte slice into float for metrics
+	// zkPayloadSize := appPayload[4:]
+	// packetSizeHistogram.Observe(zkPayloadSize)
+
+	// TODO: add the ablity to swap this logic if you want to sniff on a client
+	// if the source port is ZK port, we treat everything as a server request
+	if tcp.SrcPort == zkDefaultPort {
+		if err := handleOutgoing(ip, tcp, appPayload[4:], rMap, packet.Metadata()); err != nil {
+			logger.Error("error processing packet", zap.Error(err))
+			return
+		}
+	}
+	// If we detect the destination is the ZK port we treat this as an incoming client call.
+	if tcp.DstPort == zkDefaultPort {
+		if err := handleIncoming(ip, tcp, appPayload[4:], rMap, packet.Metadata()); err != nil {
+			logger.Error("error processing packet", zap.Error(err))
+			return
+		}
+	}
+}
+
 func castLayers(packet gopacket.Packet) (*layers.TCP, *layers.IPv4, error) {
 	// Need TCP to use the source and destination ports to see the driection of the packets
 	tcpLayer := packet.Layer(layers.LayerTypeTCP)
@@ -132,132 +164,43 @@ func castLayers(packet gopacket.Packet) (*layers.TCP, *layers.IPv4, error) {
 	return tcp, ip, nil
 }
 
-func processZookeeperPackets(packet gopacket.Packet, rMap clientResquestMap) {
-	// In this hot path we want to return as soon as we know anything is not going through
-
-	// Check for errors
-	if err := packet.ErrorLayer(); err != nil {
-		logger.Error("error layer found in packet", zap.Error(err.Error()))
-		return
-	}
-
-	tcp, ip, err := castLayers(packet)
-	if err != nil {
-		return
-	}
-
-	applicationLayer := packet.ApplicationLayer()
-	if applicationLayer == nil {
-		return
-	}
-	appPayload := applicationLayer.Payload()
-
-	// For Zookeeper the first 4 bytes is the payload size. We ignore it for now.
-	if tcp.SrcPort == zkDefaultPort {
-		if err := handleResponce(ip, tcp, appPayload[4:], rMap, packet.Metadata()); err != nil {
-			logger.Error("error processing packet", zap.Error(err))
-			return
-		}
-	}
-	if tcp.DstPort == zkDefaultPort {
-		if err := handleClient(ip, tcp, appPayload[4:], rMap, packet.Metadata()); err != nil {
-			logger.Error("error processing packet", zap.Error(err))
-			return
-		}
-	}
-}
-
-func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, metaData *gopacket.PacketMetadata) error {
+func handleIncoming(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, metaData *gopacket.PacketMetadata) error {
+	// The incoming packets all have headers. the only relaible part that we can then determine how to decode the packet payload
 	header := &requestHeader{}
 	if _, err := zk.DecodePacket(buf[:8], header); err != nil {
 		logger.Error("--> failed to decode header", zap.Error(err), zap.Binary("first-eight-bytes", buf[:8]))
 		return err
 	}
+	operationCounter.With(prometheus.Labels{"operation": header.Opcode.String(), "direction": "incoming"}).Inc()
+
 	// TODO: Add metric for even pings?
 	// This is the pingRequest. lets ignore for now
 	if header.Opcode == OpPing {
 		return nil
 	}
-
 	client := &client{host: ip.SrcIP, port: tcp.SrcPort, xid: header.Xid}
-	trackingOperation := &opTime{opCode: header.Opcode, time: metaData.Timestamp}
-	// This section is breaking up how to process different request types all based on the header operation
-	// We have a few special cases where we want to see metrics for watchs and multi operations
-	switch header.Opcode {
-	case OpPing:
-	case OpNotify:
-		if header.Xid == 0 {
-			res := &connectRequest{}
-			if _, err := zk.DecodePacket(buf, res); err != nil {
-				return err
-			}
-			logger.Info("---> client connect", zap.Reflect("res", res), zap.Object("header", header))
-			return nil
-		}
-		res, err := processOperation(OpNotify, buf[8:], zk.RequestStructForOp)
-		if err != nil {
-			return err
-		}
-		logger.Debug("--> client notify result", zap.Object("header", header), zap.Any("result", res))
-	case OpMulti:
-		res, err := processMultiOperation(buf[8:])
-		if err != nil {
-			return err
-		}
-		logger.Debug("--> client multi request", zap.Reflect("res", res), zap.Object("header", header))
-	case OpGetData:
-		getData := &getDataRequest{}
-		_, err := zk.DecodePacket(buf[8:], getData)
-		if err != nil {
-			return err
-		}
-		if getData.Watch {
-			logger.Debug("I made it to a watch notification")
-			trackingOperation = &opTime{opCode: OpType(opGetDataW), time: metaData.Timestamp, watch: getData.Watch}
-		}
-		logger.Debug("--> client getData request", zap.Object("header", header), zap.Any("result", getData), zap.Object("trackingOp", trackingOperation))
-	case OpGetChildren2:
-		getData := &getChildren2Request{}
-		_, err := zk.DecodePacket(buf[8:], getData)
-		if err != nil {
-			return err
-		}
-		if getData.Watch {
-			trackingOperation.opCode = OpType(opGetChildren2W)
-		}
-		logger.Debug("--> client getChildren2Request request", zap.Object("header", header), zap.Any("result", getData))
-	case OpExists:
-		req := &existsRequest{}
-		_, err := zk.DecodePacket(buf[8:], req)
-		if err != nil {
-			return err
-		}
-		if req.Watch {
-			trackingOperation.opCode = OpType(opExistsW)
-		}
-		logger.Debug("--> client getExist request", zap.Object("header", header), zap.Any("result", req))
-	default:
-		res, err := processOperation(header.Opcode, buf[8:], zk.RequestStructForOp)
-		if err != nil {
-			return err
-		}
-		logger.Debug("--> client request result", zap.Object("header", header), zap.Any("result", res))
-	}
-	rMap[client.String()] = trackingOperation
-	operationCounter.With(prometheus.Labels{"operation": trackingOperation.opCode.String()}).Inc()
 
+	ot, err := processIncomingOperation(client, header, buf)
+	if err != nil {
+		logger.Error("failed to process incoming operation", zap.Error(err))
+	}
+	ot.time = metaData.Timestamp
+
+	rMap[client.String()] = ot
+	// logger.Debug("--> incoming tracking operation", zap.Object("trackingOperation", ot))
 	return nil
 }
 
-func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, packetTime *gopacket.PacketMetadata) error {
+func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, packetTime *gopacket.PacketMetadata) error {
 	header := &responseHeader{}
 	if _, err := zk.DecodePacket(buf[:16], header); err != nil {
 		return err
 	}
+	l := logger.With(zap.Object("h", header))
 	// Thoery: This means the rest of the packet is blank
 	// Have not proven it with tests just yet
 	if header.Err < 0 {
-		logger.Warn("<-- responce error", zap.Object("header", header))
+		l.Warn("<-- responce error")
 		return nil
 	}
 
@@ -271,52 +214,57 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		if _, err := zk.DecodePacket(buf, res); err != nil {
 			return err
 		}
-		logger.Debug("<-- connect", zap.Stringer("src", ip.SrcIP), zap.Any("responce", res))
+		l.Debug("<-- connect", zap.Stringer("src", ip.SrcIP), zap.Any("responce", res))
 		// serverOutput.Fprintf(output, "<xxx Server connect: %#v\n", res)
 		return nil
 	case -1:
 		// Watch event
 		// TODO: Impliment watch tracking
-		// logger.Warn("This code is condition ground zero")
+		/// i dont think its possible without much more work on tracking paths as well as xids.
+		// {"h": {"xid": -1, "zxid": -1, "errorCode": 0, "errorMsg": ""}, "res": {"type": 3, "path": "/node-299352457"}}
 		res := &watcherEvent{}
 		_, err := zk.DecodePacket(buf[16:], res)
 		if err != nil {
 			return err
 		}
-		logger.Info("<-- watcher event notification", zap.Any("res", res))
+		l.Info("<-- watcher event notification", zap.Any("res", res))
+		operationCounter.With(prometheus.Labels{"operation": "watch_notification", "direction": "outgoing"}).Inc()
+		return nil
 	}
 
 	client := &client{host: ip.DstIP, port: tcp.DstPort, xid: header.Xid}
 	// see if we have a client request for this server reply
 	operation, found := rMap[client.String()]
-	logger.Debug("<-- server client operation found",
-		zap.Object("header", header),
-		zap.Stringer("src", ip.SrcIP),
-		zap.Stringer("client", client),
-	)
-	if found && operation.opCode != 0 {
-		opSeconds := packetTime.Timestamp.Sub(operation.time).Seconds()
 
+	if found && operation.opCode != 0 {
+		l.Debug("<-- outgoing operation found",
+			zap.Stringer("src", ip.SrcIP),
+			zap.Stringer("client", client),
+		)
+		opSeconds := packetTime.Timestamp.Sub(operation.time).Seconds()
+		operationCounter.With(prometheus.Labels{"operation": operation.opCode.String(), "direction": "outgoing"}).Inc()
 		operationHistogram.With(
 			prometheus.Labels{"operation": operation.opCode.String()},
 		).Observe(opSeconds)
+
 		switch operation.opCode {
 		case OpMulti:
 			res, err := processMultiOperation(buf[16:])
 			if err != nil {
 				return err
 			}
-			logger.Debug("<-- multi responce", zap.Reflect("res", res), zap.Object("op", operation.opCode))
+			l.Debug("<-- multi responce", zap.Reflect("res", res), zap.Object("op", operation.opCode))
 		default:
 			res, err := processOperation(operation.opCode, buf[16:], zk.ResponseStructForOp)
 			if err != nil {
 				return err
 			}
-			logger.Debug("<-- server responce", zap.Any("struct", res), zap.Object("header", header))
+			l.Debug("<-- outgoing responce", zap.Any("struct", res))
 		}
 		delete(rMap, client.String())
 		return nil
 	}
+	l.Warn("detected server packet with no tracked request, unable to decode.")
 	return nil
 }
 
