@@ -24,7 +24,7 @@ const (
 	errNotEmpty                zk.ErrCode = -111
 	errSessionExpired          zk.ErrCode = -112
 	errInvalidCallback         zk.ErrCode = -113
-	errInvalidAcl              zk.ErrCode = -114
+	errInvalidACL              zk.ErrCode = -114
 	errAuthFailed              zk.ErrCode = -115
 	errClosing                 zk.ErrCode = -116
 	errNothing                 zk.ErrCode = -117
@@ -41,7 +41,7 @@ var errCodeToString = map[zk.ErrCode]string{
 	errNodeExists:              "node already exists",
 	errNotEmpty:                "node has children",
 	errSessionExpired:          "session has been expired by the server",
-	errInvalidAcl:              "invalid ACL specified",
+	errInvalidACL:              "invalid ACL specified",
 	errAuthFailed:              "client authentication failed",
 	errClosing:                 "zookeeper is closing",
 	errNothing:                 "no server responsees to process",

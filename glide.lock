@@ -1,12 +1,12 @@
-hash: b66b450e428bb87b8a27c28a1214d0b7cd3a36ee81bee27c2f9c3f040e136aa0
-updated: 2017-03-13T13:09:30.970946159-07:00
+hash: 835a8d996f2d38077050e6d4346579b92ed9f92946687d12ee6552b23904d411
+updated: 2017-04-06T21:53:51.635485296-07:00
 imports:
 - name: github.com/beorn7/perks
   version: 4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9
   subpackages:
   - quantile
 - name: github.com/golang/protobuf
-  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+  version: 7cc19b78d562895b13596ddce7aafb59dd789318
   subpackages:
   - proto
 - name: github.com/google/gopacket
@@ -25,17 +25,17 @@ imports:
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/prometheus/client_golang
-  version: 69bb3870645f63c67a8dc9c9ef94585fd0d98c80
+  version: 08fd2e12372a66e68e30523c7642e0cbc3e4fbde
   subpackages:
   - prometheus
   - prometheus/promhttp
   - promhttp
 - name: github.com/prometheus/client_model
-  version: 6f3806018612930941127f2a7c6c453ba2c527d2
+  version: fa8ad6fec33561be4280a8f0514318c79d7f6cb6
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 49fee292b27bfff7f354ee0f64e1bc4850462edf
+  version: f36a8da2241e626287bf1adfa7bc2f66bbc6770b
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
@@ -47,7 +47,7 @@ imports:
 - name: go.uber.org/atomic
   version: 3b8db5e93c4c02efbc313e17b2e796b0914a01fb
 - name: go.uber.org/zap
-  version: 4e517d38b2138e59475d6468e7a6b626eecdaa66
+  version: a2773be06b9ac7c318a3a105b5c310af5730c6b4
   subpackages:
   - buffer
   - internal/bufferpool

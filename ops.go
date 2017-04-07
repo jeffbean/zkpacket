@@ -15,16 +15,20 @@ const (
 	OpCreate
 	// OpDelete is zk connection Delete()
 	OpDelete
-
+	// OpExists is zk connection Exists()
 	OpExists
+	// OpGetData is zk connection Get()
 	OpGetData
-	OpSetData // 5
+	// OpSetData is zk connection Set()
+	OpSetData
 
+	// OpGetACL is zk connection GetACL()
 	OpGetACL
 	OpSetACL
 	OpGetChildren
 	OpSync // 9
 
+	// OpPing is the zk client connection ping request
 	OpPing OpType = iota + 1 // 11
 	OpGetChildren2
 	OpCheck
