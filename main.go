@@ -173,12 +173,11 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 		logger.Error("--> failed to decode header", zap.Error(err), zap.Binary("first-eight-bytes", buf[:8]))
 		return err
 	}
-
-	// This is the pingRequest. lets ignore for now after counting the stat
+	// TODO: Add metric for even pings?
+	// This is the pingRequest. lets ignore for now
 	if header.Opcode == OpPing {
 		return nil
 	}
-	// logger.Debug("--> client request found", zap.Object("header", header))
 
 	client := &client{host: ip.SrcIP, port: tcp.SrcPort, xid: header.Xid}
 	trackingOperation := &opTime{opCode: header.Opcode, time: metaData.Timestamp}
@@ -193,8 +192,9 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 				return err
 			}
 			logger.Info("---> client connect", zap.Reflect("res", res), zap.Object("header", header))
+			return nil
 		}
-		res, err := processOperation(header.Opcode, buf[8:], zk.RequestStructForOp)
+		res, err := processOperation(OpNotify, buf[8:], zk.RequestStructForOp)
 		if err != nil {
 			return err
 		}
@@ -213,7 +213,7 @@ func handleClient(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResqu
 		}
 		if getData.Watch {
 			logger.Debug("I made it to a watch notification")
-			trackingOperation = &opTime{opCode: OpType(opGetDataW), time: metaData.Timestamp}
+			trackingOperation = &opTime{opCode: OpType(opGetDataW), time: metaData.Timestamp, watch: getData.Watch}
 		}
 		logger.Debug("--> client getData request", zap.Object("header", header), zap.Any("result", getData), zap.Object("trackingOp", trackingOperation))
 	case OpGetChildren2:
@@ -257,7 +257,7 @@ func handleResponce(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	// Thoery: This means the rest of the packet is blank
 	// Have not proven it with tests just yet
 	if header.Err < 0 {
-		logger.Error("<-- responce error", zap.Object("header", header))
+		logger.Warn("<-- responce error", zap.Object("header", header))
 		return nil
 	}
 
