@@ -8,7 +8,7 @@ var (
 			Name: "zk_op_count",
 			Help: "Number of operations.",
 		},
-		[]string{"operation", "direction"},
+		[]string{"operation", "direction", "watch"},
 	)
 	operationHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -30,5 +30,5 @@ func init() {
 	// Metrics have to be registered to be exposed:
 	prometheus.MustRegister(operationCounter)
 	prometheus.MustRegister(operationHistogram)
-	prometheus.MustRegister(packetSizeHistogram)
+	// prometheus.MustRegister(packetSizeHistogram)
 }

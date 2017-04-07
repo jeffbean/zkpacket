@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/gopacket"
@@ -171,7 +172,6 @@ func handleIncoming(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		logger.Error("--> failed to decode header", zap.Error(err), zap.Binary("first-eight-bytes", buf[:8]))
 		return err
 	}
-	operationCounter.With(prometheus.Labels{"operation": header.Opcode.String(), "direction": "incoming"}).Inc()
 
 	// TODO: Add metric for even pings?
 	// This is the pingRequest. lets ignore for now
@@ -185,6 +185,13 @@ func handleIncoming(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		logger.Error("failed to process incoming operation", zap.Error(err))
 	}
 	ot.time = metaData.Timestamp
+	operationCounter.With(
+		prometheus.Labels{
+			"operation": header.Opcode.String(),
+			"direction": "incoming",
+			"watch":     strconv.FormatBool(ot.watch),
+		},
+	).Inc()
 
 	rMap[client.String()] = ot
 	// logger.Debug("--> incoming tracking operation", zap.Object("trackingOperation", ot))
@@ -228,7 +235,11 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 			return err
 		}
 		l.Info("<-- watcher event notification", zap.Any("res", res))
-		operationCounter.With(prometheus.Labels{"operation": "watch_notification", "direction": "outgoing"}).Inc()
+		operationCounter.With(prometheus.Labels{
+			"operation": "watch_notification",
+			"direction": "outgoing",
+			"watch":     "false",
+		}).Inc()
 		return nil
 	}
 
@@ -242,7 +253,13 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 			zap.Stringer("client", client),
 		)
 		opSeconds := packetTime.Timestamp.Sub(operation.time).Seconds()
-		operationCounter.With(prometheus.Labels{"operation": operation.opCode.String(), "direction": "outgoing"}).Inc()
+		operationCounter.With(
+			prometheus.Labels{
+				"operation": operation.opCode.String(),
+				"direction": "outgoing",
+				"watch":     strconv.FormatBool(operation.watch),
+			},
+		).Inc()
 		operationHistogram.With(
 			prometheus.Labels{"operation": operation.opCode.String()},
 		).Observe(opSeconds)

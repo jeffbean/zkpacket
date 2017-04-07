@@ -37,7 +37,7 @@ func processIncomingOperation(client *client, header *requestHeader, buf []byte)
 			l.Info("---> client connect", zap.Any("res", res))
 			return ot, nil
 		}
-		res, err := processOperation(header.Opcode, buf[8:], zk.RequestStructForOp)
+		res, err := processOperation(OpNotify, buf[8:], zk.RequestStructForOp)
 		if err != nil {
 			return ot, err
 		}
@@ -48,16 +48,29 @@ func processIncomingOperation(client *client, header *requestHeader, buf []byte)
 			return ot, err
 		}
 		l.Debug("--> client multi request", zap.Any("res", res))
-	case OpGetData, OpGetChildren2, OpExists:
-		// ops that can have the option to watch the path
-		res, err := processOperation(header.Opcode, buf[8:], zk.RequestStructForOp)
-		if err != nil {
+	case OpGetData:
+		res := &getDataRequest{}
+		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
 			return ot, err
 		}
-		// ot.watch = res.Watch
-		l.Debug("--> client watchable request", zap.Any("result", res))
+		ot.watch = res.Watch
+		l.Debug("--> client getData request", zap.Any("result", res))
 		return ot, nil
+	case OpGetChildren2:
+		res := &getChildren2Request{}
+		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
+			return nil, err
+		}
+		ot.watch = res.Watch
 
+		l.Debug("--> client getChildren2Request request", zap.Any("result", res))
+	case OpExists:
+		res := &existsRequest{}
+		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
+			return nil, err
+		}
+		ot.watch = res.Watch
+		l.Debug("--> client getExist request", zap.Any("result", res))
 	default:
 		res, err := processOperation(header.Opcode, buf[8:], zk.RequestStructForOp)
 		if err != nil {
