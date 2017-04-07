@@ -7,5 +7,6 @@ COPY . /go/src/github.com/jeffbean/zkpacket
 WORKDIR /go/src/github.com/jeffbean/zkpacket
 
 # RUN glide install
+RUN go test -v
 RUN go build 
 CMD ["./zkpacket"]

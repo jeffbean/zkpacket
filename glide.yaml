@@ -13,3 +13,5 @@ import:
 - package: github.com/prometheus/client_golang/prometheus
   subpackages:
   - promhttp
+test:
+- package: github.com/stretchr/testify/assert
