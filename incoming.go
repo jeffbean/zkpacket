@@ -4,6 +4,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jeffbean/zkpacket/proto"
+
 	"github.com/jeffbean/go-zookeeper/zk"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -11,7 +13,7 @@ import (
 
 type opTime struct {
 	time   time.Time
-	opCode OpType
+	opCode proto.OpType
 	watch  bool
 }
 
@@ -24,7 +26,7 @@ func (o *opTime) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 
 var errBufferTooShort = errors.New("buffer too short")
 
-func processIncomingOperation(client *client, header *requestHeader, buf []byte) (*opTime, error) {
+func processIncomingOperation(client *client, header *proto.RequestHeader, buf []byte) (*opTime, error) {
 	// This section is breaking up how to process different request types all based on the header operation
 	// We have a few special cases where we want to see metrics for watchs and multi operations
 	ot := &opTime{opCode: header.Opcode, watch: false}
@@ -34,37 +36,37 @@ func processIncomingOperation(client *client, header *requestHeader, buf []byte)
 	var err error
 
 	switch header.Opcode {
-	case OpPing:
-	case OpNotify:
+	case proto.OpPing:
+	case proto.OpNotify:
 		if header.Xid == 0 {
-			res = &connectRequest{}
+			res = &proto.ConnectRequest{}
 			if _, err := zk.DecodePacket(buf, res); err != nil {
 				return ot, err
 			}
 			return ot, nil
 		}
-		res, err = processOperation(OpNotify, buf[8:], zk.RequestStructForOp)
+		res, err = processOperation(proto.OpNotify, buf[8:], zk.RequestStructForOp)
 		if err != nil {
 			return ot, err
 		}
-	case OpMulti:
+	case proto.OpMulti:
 		res, err = processMultiOperation(buf[8:])
 		if err != nil {
 			return ot, err
 		}
-	case OpGetData:
-		res := &getDataRequest{}
+	case proto.OpGetData:
+		res := &proto.GetDataRequest{}
 		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
 			return ot, err
 		}
 		ot.watch = res.Watch
-	case OpGetChildren2:
+	case proto.OpGetChildren2:
 		res := &getChildren2Request{}
 		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
 			return nil, err
 		}
 		ot.watch = res.Watch
-	case OpExists:
+	case proto.OpExists:
 		res := &existsRequest{}
 		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
 			return nil, err

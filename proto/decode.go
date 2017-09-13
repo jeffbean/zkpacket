@@ -1,41 +1,15 @@
-package main
+package proto
 
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"reflect"
 
-	"go.uber.org/zap/zapcore"
+	"github.com/jeffbean/zkpacket/zkerrors"
 
 	"github.com/jeffbean/go-zookeeper/zk"
+	"go.uber.org/zap/zapcore"
 )
-
-type requestHeader struct {
-	Xid    int32
-	Opcode OpType
-}
-
-type responseHeader struct {
-	Xid  int32
-	Zxid int64
-	Err  zk.ErrCode
-}
-
-type connectRequest struct {
-	ProtocolVersion int32
-	LastZxidSeen    int64
-	TimeOut         int32
-	SessionID       int64
-	Passwd          []byte
-}
-
-type connectResponse struct {
-	ProtocolVersion int32
-	TimeOut         int32
-	SessionID       int64
-	Passwd          []byte
-}
 
 type pathWatchRequest struct {
 	Path  string
@@ -44,7 +18,6 @@ type pathWatchRequest struct {
 
 // We special case these so we track if these are watching actions
 type existsRequest pathWatchRequest
-type getDataRequest pathWatchRequest
 type getChildren2Request pathWatchRequest
 
 type multiHeader struct {
@@ -128,9 +101,9 @@ func (r *multiResponse) Decode(buf []byte) (int, error) {
 			total += n
 		}
 		r.Ops = append(r.Ops, res)
-		if multiErr == nil && res.Err != errOk {
+		if multiErr == nil && res.Err != zkerrors.ErrOk {
 			// Use the first error as the error returned from Multi().
-			multiErr = errors.New(errCodeToString[res.Err])
+			multiErr = errors.New(zkerrors.ZKErrCodeToMessage(res.Err))
 		}
 	}
 	return total, multiErr
@@ -209,27 +182,12 @@ func decodePacketValue(buf []byte, v reflect.Value) (int, error) {
 	return n, nil
 }
 
-func (r *responseHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
-	kv.AddInt("xid", int(r.Xid))
-	kv.AddInt64("zxid", r.Zxid)
-	kv.AddInt("errorCode", int(r.Err))
-	kv.AddString("errorMsg", errCodeToMessage(r.Err))
-	return nil
-}
-
-func (r *requestHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
-	kv.AddInt("xid", int(r.Xid))
-	kv.AddInt32("opcode", int32(r.Opcode))
-	kv.AddString("opName", r.Opcode.String())
-	return nil
-}
-
 func (r *multiHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	kv.AddBool("done", r.Done)
 	kv.AddInt32("opcode", int32(r.Type))
 	kv.AddString("opName", r.Type.String())
 	kv.AddInt("errorCode", int(r.Err))
-	kv.AddString("errorMsg", errCodeToMessage(r.Err))
+	kv.AddString("errorMsg", zkerrors.ZKErrCodeToMessage(r.Err))
 	return nil
 }
 
@@ -237,8 +195,4 @@ func (r *watcherEvent) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	kv.AddInt32("type", int32(r.Type))
 	kv.AddString("path", r.Path)
 	return nil
-}
-
-func (r *responseHeader) String() string {
-	return fmt.Sprintf("XID: %v, ZXID: %v, Err: %v", r.Xid, r.Zxid, errCodeToMessage(r.Err))
 }

@@ -1,4 +1,4 @@
-package main
+package proto
 
 import "go.uber.org/zap/zapcore"
 

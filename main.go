@@ -19,6 +19,7 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"github.com/jeffbean/go-zookeeper/zk"
+	"github.com/jeffbean/zkpacket/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -285,7 +286,7 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	return nil
 }
 
-func processOperation(op OpType, buf []byte, cb func(int32) interface{}) (interface{}, error) {
+func processOperation(op proto.OpType, buf []byte, cb func(int32) interface{}) (interface{}, error) {
 	rStruct := cb(int32(op))
 	// logger.Debug("found struct for operation", zap.Object("op", op), zap.Reflect("struct", rStruct))
 
