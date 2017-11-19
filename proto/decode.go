@@ -26,7 +26,7 @@ type multiHeader struct {
 	Err  zk.ErrCode
 }
 
-type multiResponse struct {
+type MultiResponse struct {
 	Ops        []multiResponseOp
 	DoneHeader multiHeader
 }
@@ -38,7 +38,7 @@ type multiResponseOp struct {
 	Err    zk.ErrCode
 }
 
-type watcherEvent struct {
+type WatcherEvent struct {
 	Type  zk.EventType
 	State zk.State
 	Path  string
@@ -61,7 +61,7 @@ type decoder interface {
 	Decode(buf []byte) (int, error)
 }
 
-func (r *multiResponse) Decode(buf []byte) (int, error) {
+func (r *MultiResponse) Decode(buf []byte) (int, error) {
 	var multiErr error
 
 	r.Ops = make([]multiResponseOp, 0)
@@ -191,7 +191,7 @@ func (r *multiHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	return nil
 }
 
-func (r *watcherEvent) MarshalLogObject(kv zapcore.ObjectEncoder) error {
+func (r *WatcherEvent) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	kv.AddInt32("type", int32(r.Type))
 	kv.AddString("path", r.Path)
 	return nil

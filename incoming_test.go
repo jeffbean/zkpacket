@@ -4,6 +4,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/jeffbean/zkpacket/proto"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -44,9 +45,9 @@ func TestPassingTest(t *testing.T) {
 func TestProcessIncomingOperationNoPayload(t *testing.T) {
 	logger = zap.NewNop()
 	fakeClient := &client{host: net.ParseIP("127.0.0.5"), port: 10, xid: 10}
-	fakeRequestHeader := &requestHeader{
+	fakeRequestHeader := &proto.RequestHeader{
 		Xid:    10,
-		Opcode: OpCreate,
+		Opcode: proto.OpCreate,
 	}
 	fakeBuffer := []byte{}
 	_, err := processIncomingOperation(fakeClient, fakeRequestHeader, fakeBuffer)

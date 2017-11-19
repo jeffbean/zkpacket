@@ -15,11 +15,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/jeffbean/zkpacket/proto"
+
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"github.com/jeffbean/go-zookeeper/zk"
-	"github.com/jeffbean/zkpacket/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -168,7 +169,7 @@ func castLayers(packet gopacket.Packet) (*layers.TCP, *layers.IPv4, error) {
 
 func handleIncoming(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, metaData *gopacket.PacketMetadata) error {
 	// The incoming packets all have headers. the only relaible part that we can then determine how to decode the packet payload
-	header := &requestHeader{}
+	header := &proto.RequestHeader{}
 	if _, err := zk.DecodePacket(buf[:8], header); err != nil {
 		logger.Error("--> failed to decode header", zap.Error(err), zap.Binary("first-eight-bytes", buf[:8]))
 		return err
@@ -176,7 +177,7 @@ func handleIncoming(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 
 	// TODO: Add metric for even pings?
 	// This is the pingRequest. lets ignore for now
-	if header.Opcode == OpPing {
+	if header.Opcode == proto.OpPing {
 		return nil
 	}
 	client := &client{host: ip.SrcIP, port: tcp.SrcPort, xid: header.Xid}
@@ -200,7 +201,7 @@ func handleIncoming(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 }
 
 func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, packetTime *gopacket.PacketMetadata) error {
-	header := &responseHeader{}
+	header := &proto.ResponseHeader{}
 	if _, err := zk.DecodePacket(buf[:16], header); err != nil {
 		return err
 	}
@@ -218,7 +219,7 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	}
 	switch header.Xid {
 	case 0:
-		res := &connectResponse{}
+		res := &proto.ConnectResponse{}
 		if _, err := zk.DecodePacket(buf, res); err != nil {
 			return err
 		}
@@ -230,7 +231,7 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		// TODO: Impliment watch tracking
 		/// i dont think its possible without much more work on tracking paths as well as xids.
 		// {"h": {"xid": -1, "zxid": -1, "errorCode": 0, "errorMsg": ""}, "res": {"type": 3, "path": "/node-299352457"}}
-		res := &watcherEvent{}
+		res := &proto.WatcherEvent{}
 		_, err := zk.DecodePacket(buf[16:], res)
 		if err != nil {
 			return err
@@ -266,7 +267,7 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		).Observe(opSeconds)
 
 		switch operation.opCode {
-		case OpMulti:
+		case proto.OpMulti:
 			res, err := processMultiOperation(buf[16:])
 			if err != nil {
 				return err
@@ -297,8 +298,8 @@ func processOperation(op proto.OpType, buf []byte, cb func(int32) interface{}) (
 	return rStruct, nil
 }
 
-func processMultiOperation(buf []byte) (*multiResponse, error) {
-	mHeader := &multiResponse{}
+func processMultiOperation(buf []byte) (*proto.MultiResponse, error) {
+	mHeader := &proto.MultiResponse{}
 
 	_, err := mHeader.Decode(buf)
 	if err != nil {

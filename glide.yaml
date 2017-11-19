@@ -9,7 +9,7 @@ import:
   subpackages:
   - zk
 - package: go.uber.org/zap
-  version: v1.1.0
+  version: ^v1
 - package: github.com/prometheus/client_golang/prometheus
   subpackages:
   - promhttp

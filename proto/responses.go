@@ -10,13 +10,13 @@ import (
 )
 
 // ResponseHeader is the first bytes for all ZK response packets
-type responseHeader struct {
+type ResponseHeader struct {
 	Xid  int32
 	Zxid int64
 	Err  zk.ErrCode
 }
 
-type connectResponse struct {
+type ConnectResponse struct {
 	ProtocolVersion int32
 	TimeOut         int32
 	SessionID       int64
@@ -24,7 +24,7 @@ type connectResponse struct {
 }
 
 // MarshalLogObject renders the  header for logging
-func (r *responseHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
+func (r *ResponseHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	kv.AddInt("xid", int(r.Xid))
 	kv.AddInt64("zxid", r.Zxid)
 	kv.AddInt("errorCode", int(r.Err))
@@ -32,6 +32,6 @@ func (r *responseHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	return nil
 }
 
-func (r *responseHeader) String() string {
+func (r *ResponseHeader) String() string {
 	return fmt.Sprintf("XID: %v, ZXID: %v, Err: %v", r.Xid, r.Zxid, zkerrors.ZKErrCodeToMessage(r.Err))
 }

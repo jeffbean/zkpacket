@@ -61,13 +61,13 @@ func processIncomingOperation(client *client, header *proto.RequestHeader, buf [
 		}
 		ot.watch = res.Watch
 	case proto.OpGetChildren2:
-		res := &getChildren2Request{}
+		res := &proto.GetChildren2Request{}
 		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
 			return nil, err
 		}
 		ot.watch = res.Watch
 	case proto.OpExists:
-		res := &existsRequest{}
+		res := &proto.ExistsRequest{}
 		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
 			return nil, err
 		}
