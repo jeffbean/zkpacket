@@ -170,7 +170,7 @@ func castLayers(packet gopacket.Packet) (*layers.TCP, *layers.IPv4, error) {
 func handleIncoming(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, metaData *gopacket.PacketMetadata) error {
 	// The incoming packets all have headers. the only relaible part that we can then determine how to decode the packet payload
 	header := &proto.RequestHeader{}
-	if _, err := zk.DecodePacket(buf[:8], header); err != nil {
+	if _, err := zk.DecodePacket(buf[:proto.RequestHeaderByteLength], header); err != nil {
 		logger.Error("--> failed to decode header", zap.Error(err), zap.Binary("first-eight-bytes", buf[:8]))
 		return err
 	}
@@ -202,7 +202,7 @@ func handleIncoming(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 
 func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, packetTime *gopacket.PacketMetadata) error {
 	header := &proto.ResponseHeader{}
-	if _, err := zk.DecodePacket(buf[:16], header); err != nil {
+	if _, err := zk.DecodePacket(buf[:proto.ResponseHeaderByteLength], header); err != nil {
 		return err
 	}
 	l := logger.With(zap.Object("h", header))

@@ -11,6 +11,13 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+const (
+	// RequestHeaderByteLength is the length for the buffer size to read for a request header
+	RequestHeaderByteLength = 8
+	// ResponseHeaderByteLength is the length for the buffer size to read for a request header
+	ResponseHeaderByteLength = 16
+)
+
 type pathWatchRequest struct {
 	Path  string
 	Watch bool
