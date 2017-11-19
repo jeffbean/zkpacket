@@ -171,7 +171,7 @@ func handleIncoming(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	// The incoming packets all have headers. the only relaible part that we can then determine how to decode the packet payload
 	header := &proto.RequestHeader{}
 	if _, err := zk.DecodePacket(buf[:proto.RequestHeaderByteLength], header); err != nil {
-		logger.Error("--> failed to decode header", zap.Error(err), zap.Binary("first-eight-bytes", buf[:8]))
+		logger.Error("--> failed to decode header", zap.Error(err), zap.Binary("first-eight-bytes", buf[:proto.RequestHeaderByteLength]))
 		return err
 	}
 
@@ -232,7 +232,7 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		/// i dont think its possible without much more work on tracking paths as well as xids.
 		// {"h": {"xid": -1, "zxid": -1, "errorCode": 0, "errorMsg": ""}, "res": {"type": 3, "path": "/node-299352457"}}
 		res := &proto.WatcherEvent{}
-		_, err := zk.DecodePacket(buf[16:], res)
+		_, err := zk.DecodePacket(buf[proto.ResponseHeaderByteLength:], res)
 		if err != nil {
 			return err
 		}
@@ -268,13 +268,16 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 
 		switch operation.opCode {
 		case proto.OpMulti:
-			res, err := processMultiOperation(buf[16:])
+			res, err := processMultiOperation(buf[proto.ResponseHeaderByteLength:])
 			if err != nil {
 				return err
 			}
 			l.Debug("<-- multi responce", zap.Reflect("res", res), zap.Object("op", operation.opCode))
 		default:
-			res, err := processOperation(operation.opCode, buf[16:], zk.ResponseStructForOp)
+			if len(buf) < proto.ResponseHeaderByteLength {
+				return errors.New("packet too short to read response header")
+			}
+			res, err := processOperation(operation.opCode, buf[proto.ResponseHeaderByteLength:], zk.ResponseStructForOp)
 			if err != nil {
 				return err
 			}

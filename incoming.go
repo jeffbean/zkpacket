@@ -24,7 +24,7 @@ func (o *opTime) MarshalLogObject(kv zapcore.ObjectEncoder) error {
 	return nil
 }
 
-var errBufferTooShort = errors.New("buffer too short")
+var errBufferTooShort = errors.New("buffer too short for a request ZK packet")
 
 func processIncomingOperation(client *client, header *proto.RequestHeader, buf []byte) (*opTime, error) {
 	// This section is breaking up how to process different request types all based on the header operation
@@ -45,38 +45,38 @@ func processIncomingOperation(client *client, header *proto.RequestHeader, buf [
 			}
 			return ot, nil
 		}
-		res, err = processOperation(proto.OpNotify, buf[8:], zk.RequestStructForOp)
+		res, err = processOperation(proto.OpNotify, buf[proto.RequestHeaderByteLength:], zk.RequestStructForOp)
 		if err != nil {
 			return ot, err
 		}
 	case proto.OpMulti:
-		res, err = processMultiOperation(buf[8:])
+		res, err = processMultiOperation(buf[proto.RequestHeaderByteLength:])
 		if err != nil {
 			return ot, err
 		}
 	case proto.OpGetData:
 		res := &proto.GetDataRequest{}
-		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
+		if _, err := zk.DecodePacket(buf[proto.RequestHeaderByteLength:], res); err != nil {
 			return ot, err
 		}
 		ot.watch = res.Watch
 	case proto.OpGetChildren2:
 		res := &proto.GetChildren2Request{}
-		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
+		if _, err := zk.DecodePacket(buf[proto.RequestHeaderByteLength:], res); err != nil {
 			return nil, err
 		}
 		ot.watch = res.Watch
 	case proto.OpExists:
 		res := &proto.ExistsRequest{}
-		if _, err := zk.DecodePacket(buf[8:], res); err != nil {
+		if _, err := zk.DecodePacket(buf[proto.RequestHeaderByteLength:], res); err != nil {
 			return nil, err
 		}
 		ot.watch = res.Watch
 	default:
-		if len(buf) < 8 {
+		if len(buf) < proto.RequestHeaderByteLength {
 			return nil, errBufferTooShort
 		}
-		res, err = processOperation(header.Opcode, buf[8:], zk.RequestStructForOp)
+		res, err = processOperation(header.Opcode, buf[proto.RequestHeaderByteLength:], zk.RequestStructForOp)
 		if err != nil {
 			return nil, err
 		}
