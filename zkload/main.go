@@ -45,7 +45,6 @@ func printWatchEvents(eventChan <-chan zk.Event) {
 }
 
 func updateNodes(stopchan chan int, r *rand.Rand, conn *zk.Conn, tickerChan <-chan time.Time) {
-
 	for {
 		select {
 		case <-tickerChan:

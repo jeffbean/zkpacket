@@ -52,8 +52,8 @@ var errCodeToString = map[zk.ErrCode]string{
 
 // ZKErrCodeToMessage converts the ZK error code to a message
 func ZKErrCodeToMessage(ec zk.ErrCode) string {
-	if err, ok := errCodeToString[ec]; ok {
-		return err
+	if errString, ok := errCodeToString[ec]; ok {
+		return errString
 	}
 	return "unknown error"
 }

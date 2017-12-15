@@ -8,7 +8,6 @@ import (
 	"github.com/jeffbean/zkpacket/zkerrors"
 
 	"github.com/jeffbean/go-zookeeper/zk"
-	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -68,6 +67,7 @@ type decoder interface {
 	Decode(buf []byte) (int, error)
 }
 
+// Decode marshals the buffer into the stuct and returns the offset
 func (r *MultiResponse) Decode(buf []byte) (int, error) {
 	var multiErr error
 
@@ -187,19 +187,4 @@ func decodePacketValue(buf []byte, v reflect.Value) (int, error) {
 		}
 	}
 	return n, nil
-}
-
-func (r *multiHeader) MarshalLogObject(kv zapcore.ObjectEncoder) error {
-	kv.AddBool("done", r.Done)
-	kv.AddInt32("opcode", int32(r.Type))
-	kv.AddString("opName", r.Type.String())
-	kv.AddInt("errorCode", int(r.Err))
-	kv.AddString("errorMsg", zkerrors.ZKErrCodeToMessage(r.Err))
-	return nil
-}
-
-func (r *WatcherEvent) MarshalLogObject(kv zapcore.ObjectEncoder) error {
-	kv.AddInt32("type", int32(r.Type))
-	kv.AddString("path", r.Path)
-	return nil
 }

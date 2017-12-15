@@ -1,7 +1,5 @@
 package proto
 
-import "go.uber.org/zap/zapcore"
-
 // Based on ZK 3.5 https://github.com/apache/zookeeper/blob/branch-3.5/src/java/main/org/apache/zookeeper/ZooDefs.java
 
 // OpType is the type of ZK operation. Used to track operation metrics
@@ -57,10 +55,3 @@ const (
 	// OpError is for specifying errors
 	OpError OpType = -1
 )
-
-// MarshalLogObject renders the logging structure for the OpType
-func (o OpType) MarshalLogObject(kv zapcore.ObjectEncoder) error {
-	kv.AddInt32("code", int32(o))
-	kv.AddString("name", o.String())
-	return nil
-}

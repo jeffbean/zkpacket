@@ -25,7 +25,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 const zkDefaultPort = 2181
@@ -64,15 +63,7 @@ type clientResquestMap map[string]*opTime
 func main() {
 	flag.Parse()
 	loggerConfig := zap.NewDevelopmentConfig()
-	loggerConfig.EncoderConfig = zapcore.EncoderConfig{
-		LevelKey:      "L",
-		TimeKey:       "",
-		MessageKey:    "M",
-		NameKey:       "N",
-		CallerKey:     "",
-		StacktraceKey: "S",
-		EncodeLevel:   zapcore.CapitalColorLevelEncoder,
-	}
+
 	logger, _ = loggerConfig.Build()
 	// TODO: make this a flag for cmdline
 	loggerConfig.Level.SetLevel(zap.DebugLevel)
@@ -123,27 +114,36 @@ func processZookeeperPackets(packet gopacket.Packet, rMap clientResquestMap) {
 		return
 	}
 	appPayload := applicationLayer.Payload()
-
+	var zkPacketSize []byte
 	// For Zookeeper the first 4 bytes is the payload size. We ignore it for now.
 	// TODO: convert byte slice into float for metrics
-	// zkPayloadSize := appPayload[4:]
 	// packetSizeHistogram.Observe(zkPayloadSize)
-
+	if len(appPayload) < 4 {
+		logger.Error("app packet does not have minimum header length, skipping")
+		return
+	}
+	zkPacketSize = appPayload[4:]
 	// TODO: add the ablity to swap this logic if you want to sniff on a client
 	// if the source port is ZK port, we treat everything as a server request
+	if err := handleZookeeperPackets(ip, tcp, zkPacketSize, rMap, packet.Metadata()); err != nil {
+		logger.Error("error processing packet", zap.Error(err))
+	}
+}
+
+func handleZookeeperPackets(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, metaData *gopacket.PacketMetadata) error {
+	// Logic to use request or reply structs for the protocol
 	if tcp.SrcPort == zkDefaultPort {
-		if err := handleOutgoing(ip, tcp, appPayload[4:], rMap, packet.Metadata()); err != nil {
-			logger.Error("error processing packet", zap.Error(err))
-			return
+		if err := handleOutgoing(ip, tcp, buf, rMap, metaData); err != nil {
+			return err
 		}
 	}
 	// If we detect the destination is the ZK port we treat this as an incoming client call.
 	if tcp.DstPort == zkDefaultPort {
-		if err := handleIncoming(ip, tcp, appPayload[4:], rMap, packet.Metadata()); err != nil {
-			logger.Error("error processing packet", zap.Error(err))
-			return
+		if err := handleIncoming(ip, tcp, buf, rMap, metaData); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
 func castLayers(packet gopacket.Packet) (*layers.TCP, *layers.IPv4, error) {
@@ -201,11 +201,14 @@ func handleIncoming(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 }
 
 func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientResquestMap, packetTime *gopacket.PacketMetadata) error {
+	if len(buf) < proto.ResponseHeaderByteLength {
+		return errors.New("length of zk payload does not allow for response header")
+	}
 	header := &proto.ResponseHeader{}
 	if _, err := zk.DecodePacket(buf[:proto.ResponseHeaderByteLength], header); err != nil {
 		return err
 	}
-	l := logger.With(zap.Object("h", header))
+	l := logger.With(zap.Any("header", header), zap.Stringer("srcip", ip.SrcIP))
 	// Thoery: This means the rest of the packet is blank
 	// Have not proven it with tests just yet
 	if header.Err < 0 {
@@ -217,13 +220,14 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 	if header.Xid == -2 {
 		return nil
 	}
+
 	switch header.Xid {
 	case 0:
 		res := &proto.ConnectResponse{}
 		if _, err := zk.DecodePacket(buf, res); err != nil {
 			return err
 		}
-		l.Debug("<-- connect", zap.Stringer("src", ip.SrcIP), zap.Any("responce", res))
+		l.Debug("<-- connect", zap.Any("response", res))
 		// serverOutput.Fprintf(output, "<xxx Server connect: %#v\n", res)
 		return nil
 	case -1:
@@ -232,11 +236,11 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 		/// i dont think its possible without much more work on tracking paths as well as xids.
 		// {"h": {"xid": -1, "zxid": -1, "errorCode": 0, "errorMsg": ""}, "res": {"type": 3, "path": "/node-299352457"}}
 		res := &proto.WatcherEvent{}
-		_, err := zk.DecodePacket(buf[proto.ResponseHeaderByteLength:], res)
-		if err != nil {
+		if _, err := zk.DecodePacket(buf[proto.ResponseHeaderByteLength:], res); err != nil {
 			return err
 		}
-		l.Info("<-- watcher event notification", zap.Any("res", res))
+		l.Info("<-- watcher event notification", zap.Any("result", res))
+
 		operationCounter.With(prometheus.Labels{
 			"operation": "watch_notification",
 			"direction": "outgoing",
@@ -251,7 +255,6 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 
 	if found && operation.opCode != 0 {
 		l.Debug("<-- outgoing operation found",
-			zap.Stringer("src", ip.SrcIP),
 			zap.Stringer("client", client),
 		)
 		opSeconds := packetTime.Timestamp.Sub(operation.time).Seconds()
@@ -266,23 +269,11 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 			prometheus.Labels{"operation": operation.opCode.String()},
 		).Observe(opSeconds)
 
-		switch operation.opCode {
-		case proto.OpMulti:
-			res, err := processMultiOperation(buf[proto.ResponseHeaderByteLength:])
-			if err != nil {
-				return err
-			}
-			l.Debug("<-- multi responce", zap.Reflect("res", res), zap.Object("op", operation.opCode))
-		default:
-			if len(buf) < proto.ResponseHeaderByteLength {
-				return errors.New("packet too short to read response header")
-			}
-			res, err := processOperation(operation.opCode, buf[proto.ResponseHeaderByteLength:], zk.ResponseStructForOp)
-			if err != nil {
-				return err
-			}
-			l.Debug("<-- outgoing responce", zap.Any("struct", res))
+		res, err := processOperation(operation.opCode, buf[proto.ResponseHeaderByteLength:], zk.ResponseStructForOp)
+		if err != nil {
+			return err
 		}
+		l.Debug("<-- outgoing responce", zap.Any("struct", res))
 		delete(rMap, client.String())
 		return nil
 	}
@@ -292,11 +283,20 @@ func handleOutgoing(ip *layers.IPv4, tcp *layers.TCP, buf []byte, rMap clientRes
 
 func processOperation(op proto.OpType, buf []byte, cb func(int32) interface{}) (interface{}, error) {
 	rStruct := cb(int32(op))
-	// logger.Debug("found struct for operation", zap.Object("op", op), zap.Reflect("struct", rStruct))
+	var err error
 
-	if _, err := zk.DecodePacket(buf, rStruct); err != nil {
-		logger.Error("failed to decode struct", zap.Error(err), zap.Object("op", op), zap.Binary("payload", buf))
-		return rStruct, err
+	switch op {
+	case proto.OpMulti:
+		rStruct, err = processMultiOperation(buf)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		// logger.Debug("found struct for operation", zap.Object("op", op), zap.Reflect("struct", rStruct))
+		if _, err = zk.DecodePacket(buf, rStruct); err != nil {
+			logger.Error("failed to decode struct", zap.Error(err), zap.Any("op", op), zap.Binary("payload", buf))
+			return nil, err
+		}
 	}
 	return rStruct, nil
 }
@@ -308,6 +308,6 @@ func processMultiOperation(buf []byte) (*proto.MultiResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	// logger.Debug("process multi operation", zap.Int("offset", offset), zap.Any("multiResponse", mHeader))
+	logger.Debug("process multi operation", zap.Any("multiResponse", mHeader))
 	return mHeader, nil
 }

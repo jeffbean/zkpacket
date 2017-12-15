@@ -1,5 +1,5 @@
 .PHONY: test
-test: 
+test:
 	go test -v
 
 .PHONY: build

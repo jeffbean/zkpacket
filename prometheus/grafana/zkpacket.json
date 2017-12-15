@@ -6,7 +6,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "hideControls": false,
-  "id": 2,
+  "id": 1,
   "links": [],
   "rows": [
     {
@@ -16,17 +16,22 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": null,
           "fill": 1,
           "id": 1,
           "legend": {
-            "avg": false,
-            "current": false,
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "hideEmpty": true,
+            "hideZero": true,
             "max": false,
             "min": false,
-            "show": false,
+            "rightSide": true,
+            "show": true,
+            "sort": "avg",
+            "sortDesc": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 1,
@@ -37,15 +42,16 @@
           "points": false,
           "renderer": "flot",
           "seriesOverrides": [],
-          "span": 6,
+          "span": 12,
           "stack": false,
           "steppedLine": false,
           "targets": [
             {
               "expr": "rate(zk_op_seconds_sum[1m]) / rate(zk_op_seconds_count[1m]) ",
               "intervalFactor": 2,
+              "legendFormat": "{{operation}}",
               "refId": "A",
-              "step": 4
+              "step": 2
             }
           ],
           "thresholds": [],
@@ -117,10 +123,10 @@
               "expr": "sum(rate(zk_op_count{watch=\"false\"}[1m])) by (operation, direction)",
               "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "",
+              "legendFormat": " {{direction}} - {{operation}}",
               "metric": "zk_op_count",
               "refId": "A",
-              "step": 4
+              "step": 2
             }
           ],
           "thresholds": [],
@@ -194,10 +200,10 @@
               "expr": "sum(rate(zk_op_count{watch=\"true\"}[1m])) by (operation, direction)",
               "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "",
+              "legendFormat": "{{direction}} - {{operation}}",
               "metric": "zk_op_count",
               "refId": "A",
-              "step": 4
+              "step": 2
             }
           ],
           "thresholds": [],
@@ -254,7 +260,7 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
@@ -285,4 +291,4 @@
   "timezone": "utc",
   "title": "ZKPacket",
   "version": 1
-}
+}.
