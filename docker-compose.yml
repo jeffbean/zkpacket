@@ -1,0 +1,62 @@
+version: '2'
+services:
+  zk:
+    build:
+      dockerfile: Dockerfile.zookeeper
+      context: docker/
+    expose: 
+      - 2181 
+      - 8085
+    ports:
+      - 8085:8085
+  zkpacket:
+    build: 
+      dockerfile: docker/Dockerfile.zkpacket
+      context: .
+    network_mode: service:zk
+  zkload:
+    build: .
+    command: ./zkload/zkload --zk-host=zk
+    links:
+      - zk
+  prometheus:
+    image: prom/prometheus:v1.5.2
+    volumes:
+      - ./prometheus/:/etc/prometheus/
+      - prometheus_data:/prometheus
+      # - /etc/localtime:/etc/localtime:ro
+    command:
+      - '-config.file=/etc/prometheus/prometheus.yaml'
+      - '-storage.local.path=/prometheus'
+      - '-log.level=debug'
+    expose:
+      - 9090
+    ports:
+      - 9090:9090
+    links:
+      - zk:zk
+      - cadvisor:cadvisor
+  cadvisor:
+    image: google/cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    expose:
+      - 8080
+    logging: 
+      driver: none
+  grafana:
+    image: grafana/grafana:4.1.2
+    depends_on:
+      - prometheus
+    ports:
+      - 3000:3000
+    env_file:
+      - grafana/config.monitoring
+    logging: 
+      driver: none
+volumes:
+    prometheus_data:
+

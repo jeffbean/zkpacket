@@ -1,9 +1,10 @@
-package main
+package zkerrors
 
-import "github.com/samuel/go-zookeeper/zk"
+import "github.com/jeffbean/go-zookeeper/zk"
 
 const (
-	errOk = 0
+	// ErrOk The OK Error code from ZK packets
+	ErrOk = 0
 	// System and server-side errors
 	errSystemError          = -1
 	errRuntimeInconsistency = -2
@@ -14,6 +15,7 @@ const (
 	errOperationTimeout     = -7
 	errBadArguments         = -8
 	errInvalidState         = -9
+
 	// API errors
 	errAPIError                zk.ErrCode = -100
 	errNoNode                  zk.ErrCode = -101 // *
@@ -24,7 +26,7 @@ const (
 	errNotEmpty                zk.ErrCode = -111
 	errSessionExpired          zk.ErrCode = -112
 	errInvalidCallback         zk.ErrCode = -113
-	errInvalidAcl              zk.ErrCode = -114
+	errInvalidACL              zk.ErrCode = -114
 	errAuthFailed              zk.ErrCode = -115
 	errClosing                 zk.ErrCode = -116
 	errNothing                 zk.ErrCode = -117
@@ -32,7 +34,7 @@ const (
 )
 
 var errCodeToString = map[zk.ErrCode]string{
-	errOk:                      "",
+	ErrOk:                      "",
 	errAPIError:                "api error",
 	errNoNode:                  "node does not exist",
 	errNoAuth:                  "not authenticated",
@@ -41,16 +43,17 @@ var errCodeToString = map[zk.ErrCode]string{
 	errNodeExists:              "node already exists",
 	errNotEmpty:                "node has children",
 	errSessionExpired:          "session has been expired by the server",
-	errInvalidAcl:              "invalid ACL specified",
+	errInvalidACL:              "invalid ACL specified",
 	errAuthFailed:              "client authentication failed",
 	errClosing:                 "zookeeper is closing",
 	errNothing:                 "no server responsees to process",
 	errSessionMoved:            "session moved to another server, so operation is ignored",
 }
 
-func errCodeToMessage(ec zk.ErrCode) string {
-	if err, ok := errCodeToString[ec]; ok {
-		return err
+// ZKErrCodeToMessage converts the ZK error code to a message
+func ZKErrCodeToMessage(ec zk.ErrCode) string {
+	if errString, ok := errCodeToString[ec]; ok {
+		return errString
 	}
 	return "unknown error"
 }

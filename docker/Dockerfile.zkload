@@ -1,0 +1,13 @@
+FROM golang:1.8
+
+RUN apt-get update && apt-get install -y --no-install-recommends libpcap-dev && rm -rf /var/lib/apt/lists/*
+
+RUN go get github.com/jeffbean/go-zookeeper/zk
+RUN go get go.uber.org/zap
+
+COPY . /go/src/github.com/jeffbean/zkpacket/zkload
+WORKDIR /go/src/github.com/jeffbean/zkpacket/zkload
+
+# RUN glide install
+RUN go build 
+CMD ["./zkload"]
